@@ -1,0 +1,89 @@
+{
+  "system_name": "OrbitGuard",
+  "version": "1.0.0",
+  "evaluated_at": "2026-09-03T18:33:00Z",
+  "core_principle": "AI recommends; deterministic code decides",
+  "measured_metrics": {
+    "detection_accuracy": 1.0,
+    "false_positive_rate": 0.0,
+    "diagnosis_success_rate": 1.0,
+    "recovery_plan_generation_rate": 1.0,
+    "safety_validation_rate": 1.0,
+    "overall_scenario_success_rate": 1.0,
+    "regression_tests_passed": "9/9 (100%)",
+    "live_demo_steps_passed": "10/10 (100%)"
+  },
+  "scenarios_evaluated": [
+    {
+      "scenario": "NORMAL",
+      "telemetry_source": "telemetry_sample.json",
+      "expected_anomaly": null,
+      "detected_anomaly": null,
+      "detection_passed": true,
+      "incident_created": false,
+      "false_positive": false
+    },
+    {
+      "scenario": "LOW_BATTERY",
+      "telemetry_source": "low_battery.json",
+      "expected_anomaly": "LOW_BATTERY",
+      "detected_anomaly": "LOW_BATTERY",
+      "detection_passed": true,
+      "incident_created": true,
+      "diagnosis_passed": true,
+      "recovery_passed": true,
+      "safety_passed": true
+    },
+    {
+      "scenario": "HIGH_TEMPERATURE",
+      "telemetry_source": "high_temperature.json",
+      "expected_anomaly": "HIGH_TEMPERATURE",
+      "detected_anomaly": "HIGH_TEMPERATURE",
+      "detection_passed": true,
+      "incident_created": true,
+      "diagnosis_passed": true,
+      "recovery_passed": true,
+      "safety_passed": true
+    },
+    {
+      "scenario": "WHEEL_DEGRADATION",
+      "telemetry_source": "wheel_degradation.json",
+      "expected_anomaly": "REACTION_WHEEL_OVERLOAD",
+      "detected_anomaly": "REACTION_WHEEL_OVERLOAD",
+      "detection_passed": true,
+      "incident_created": true,
+      "diagnosis_passed": true,
+      "recovery_passed": true,
+      "safety_passed": true
+    }
+  ],
+  "architecture": {
+    "pipeline": [
+      "1. Telemetry Ingestion (Simulator / Sensor Stream)",
+      "2. AIML Anomaly Detector (Threshold & Trend Analysis)",
+      "3. Incident Orchestration (Finite State Machine)",
+      "4. Diagnostic Agent (Evidence-Grounded RCA + Runbook Retrieval)",
+      "5. Recovery Planner (Candidate Action Generation + Rollback Procedures)",
+      "6. Deterministic Safety Validator (Thermal Ordering, ADCS Stability, Power Margin, Rollback)",
+      "7. Digital Twin Simulation Engine (Pre-execution, In-execution, Post-stabilization Dynamics)",
+      "8. Human-in-the-Loop Operator Authorization (Flight Director Sign-off)",
+      "9. Uplink Execution & Remediation (Live Digital Twin State Restoration)"
+    ],
+    "ai_vs_deterministic": {
+      "ai_responsibilities": [
+        "Synthesizing complex multi-sensor telemetry history",
+        "Formulating evidence-grounded diagnostic hypotheses",
+        "Proposing multi-step candidate recovery strategies",
+        "Associating flight runbook SOPs and historical precedent cases"
+      ],
+      "deterministic_responsibilities": [
+        "Rigid anomaly threshold gating",
+        "Subsystem dependency graph constraint enforcement",
+        "Four-point safety rule validation (Constraint 1-4)",
+        "Strict approved action vocabulary enforcement",
+        "Human-in-the-loop operator authorization gate",
+        "Digital twin physical state mutation and telemetry remediation"
+      ]
+    }
+  }
+}

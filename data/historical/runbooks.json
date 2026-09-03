@@ -1,0 +1,81 @@
+[
+  {
+    "runbook_id": "RB-EPS-001",
+    "title": "EPS Bus Low-Voltage & Battery Depletion Containment",
+    "subsystem": "EPS",
+    "applicable_anomalies": ["LOW_BATTERY", "low_battery", "BATTERY_UNDERVOLTAGE"],
+    "trigger_condition": "Battery bus voltage drops below configured operating limit (< 20.0V).",
+    "recommended_actions": [
+      "REDUCE_PAYLOAD_LOAD",
+      "SWITCH_COMM_PROFILE"
+    ],
+    "diagnostic_checks": [
+      "Verify battery current, charging/input telemetry, redundant voltage sensing, and relevant power-system telemetry.",
+      "Verify redundant battery voltage sensor readings.",
+      "Request battery charge/discharge current telemetry.",
+      "Review solar array power generation and bus load history."
+    ],
+    "safety_constraints": [
+      "Do not shed critical thermal survival heaters or command telemetry receivers.",
+      "Verify bus voltage recovery before restoring nominal payload power."
+    ],
+    "rollback_procedure": "Restore nominal payload and comms configuration if bus voltage exceeds 26.0V and telemetry indicates stable solar power input.",
+    "metadata": {
+      "source": "SATELLITE_OPERATIONS_MANUAL_V2",
+      "status": "REFERENCE_GUIDELINE_ONLY",
+      "is_advisory": true
+    }
+  },
+  {
+    "runbook_id": "RB-THM-001",
+    "title": "Battery Thermal Runaway & High-Temperature Mitigation",
+    "subsystem": "Thermal",
+    "applicable_anomalies": ["HIGH_TEMPERATURE", "battery_overheat", "BATTERY_OVERTEMPERATURE"],
+    "trigger_condition": "Battery temperature exceeds nominal thermal boundary (> 45.0°C).",
+    "recommended_actions": [
+      "REDUCE_PAYLOAD_LOAD",
+      "ENTER_SAFE_THERMAL_MODE"
+    ],
+    "diagnostic_checks": [
+      "Verify redundant battery temperature sensor readings.",
+      "Request battery charge/discharge current telemetry.",
+      "Request thermal subsystem and radiator telemetry."
+    ],
+    "safety_constraints": [
+      "Payload load reduction must precede transition into safe thermal mode.",
+      "Do not command full safe hold unless single-subsystem thermal shedding fails to arrest temperature rise."
+    ],
+    "rollback_procedure": "Exit safe thermal mode and restore nominal payload activity once battery temperature falls below 35.0°C.",
+    "metadata": {
+      "source": "SATELLITE_OPERATIONS_MANUAL_V2",
+      "status": "REFERENCE_GUIDELINE_ONLY",
+      "is_advisory": true
+    }
+  },
+  {
+    "runbook_id": "RB-ADCS-001",
+    "title": "Reaction Wheel Momentum & Attitude Degradation Stabilization",
+    "subsystem": "ADCS",
+    "applicable_anomalies": ["REACTION_WHEEL_OVERLOAD", "wheel_degradation", "ATTITUDE_CONTROL_ERROR"],
+    "trigger_condition": "Reaction wheel speed deviation exceeds 400 RPM or attitude error exceeds 0.3 deg.",
+    "recommended_actions": [
+      "REDUCE_MANEUVER_ACTIVITY",
+      "SWITCH_REDUNDANT_SENSOR"
+    ],
+    "diagnostic_checks": [
+      "Request reaction wheel motor current and torque telemetry.",
+      "Verify redundant attitude sensor measurements.",
+      "Review reaction wheel speed history for sustained deviations."
+    ],
+    "safety_constraints": [
+      "ADCS maneuver activity reduction must be executed prior to any non-ADCS action.",
+      "Verify health of redundant sensor channel before executing sensor switchover."
+    ],
+    "rollback_procedure": "Return to primary attitude sensing channel and restore nominal maneuver profile if redundant channel validation fails.",
+    "metadata": {
+      "source": "SATELLITE_OPERATIONS_MANUAL_V2",
+      "status": "REFERENCE_GUIDELINE_ONLY",
+      "is_advisory": true
+    }
+  }
+]

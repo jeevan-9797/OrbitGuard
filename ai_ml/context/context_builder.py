@@ -2,6 +2,8 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 
 # ==========================================
 # EXPECTED TELEMETRY RANGES
@@ -72,10 +74,10 @@ def build_trends(current, previous):
         previous_value = previous_telemetry[parameter]
 
         # Only calculate trends for numeric values
-        if not isinstance(current_value, (int, float)):
+        if not isinstance(current_value, (int, float)) or isinstance(current_value, bool):
             continue
 
-        if not isinstance(previous_value, (int, float)):
+        if not isinstance(previous_value, (int, float)) or isinstance(previous_value, bool):
             continue
 
         change = current_value - previous_value
@@ -191,6 +193,27 @@ def build_incident_context(telemetry_data, anomalies):
 
     power_balance = build_power_balance(telemetry)
 
+    # Retrieve relevant operational runbooks and historical cases
+    try:
+        from ai_ml.retrieval.retriever import retrieve_anomaly_knowledge
+        retrieved = retrieve_anomaly_knowledge(incident_type)
+        historical_evidence = [
+            f"Case {case.case_id} ({case.mission}): {case.resolution_applied} -> {case.outcome}"
+            for case in retrieved.historical_cases
+        ]
+        retrieved_runbooks = [
+            {
+                "runbook_id": rb.runbook_id,
+                "title": rb.title,
+                "recommended_actions": rb.recommended_actions,
+                "safety_constraints": rb.safety_constraints,
+            }
+            for rb in retrieved.runbooks
+        ]
+    except Exception:
+        historical_evidence = []
+        retrieved_runbooks = []
+
     context = {
         "satellite_id": telemetry_data["satellite_id"],
 
@@ -223,7 +246,8 @@ def build_incident_context(telemetry_data, anomalies):
             for anomaly in anomalies
         ],
 
-        "historical_evidence": []
+        "historical_evidence": historical_evidence,
+        "retrieved_runbooks": retrieved_runbooks,
     }
 
     return context

@@ -1,0 +1,14 @@
+{
+  "satellite_id": "SAT-001",
+  "timestamp": "2026-09-03T14:45:00Z",
+  "telemetry": {
+    "battery_voltage": 26.5,
+    "battery_current": 2.5,
+    "temperature": 25.0,
+    "cpu_load": 45.0,
+    "reaction_wheel_rpm": 6200.0,
+    "solar_power": 95.0,
+    "power_consumption": 4.0,
+    "communication_available": true
+  }
+}

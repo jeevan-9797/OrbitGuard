@@ -1,16 +1,27 @@
 import json
-import hashlib
 import sys
+import time
 from pathlib import Path
+
+import requests
 
 from ai_ml.detector.detector import detect_anomalies
 
 
 # ============================================================
-# TELEMETRY LOADING
+# BACKEND CONFIGURATION
+# ============================================================
+
+BACKEND_URL = "http://127.0.0.1:8001"
+SATELLITE_ID = "SAT-01"
+
+
+# ============================================================
+# LOAD AIML TELEMETRY
 # ============================================================
 
 def load_telemetry(file_name):
+
     file_path = Path("data/telemetry") / file_name
 
     if not file_path.exists():
@@ -23,219 +34,436 @@ def load_telemetry(file_name):
 
 
 # ============================================================
-# INCIDENT ID
+# MAP AIML ANOMALY TO BACKEND ANOMALY TYPE
 # ============================================================
 
-def generate_incident_id(satellite_id, timestamp):
-    """
-    Generate a deterministic incident ID from satellite + timestamp.
-    The same telemetry event always produces the same ID.
-    """
+def map_anomaly_type(anomaly_type):
 
-    raw = f"{satellite_id}:{timestamp}"
-
-    digest = hashlib.sha256(
-        raw.encode("utf-8")
-    ).hexdigest()[:6].upper()
-
-    return f"INC-{digest}"
-
-
-# ============================================================
-# TELEMETRY MAPPING
-# ============================================================
-
-def map_telemetry_to_backend(telemetry):
-    """
-    Convert our AIML telemetry format into the backend telemetry format.
-
-    IMPORTANT:
-    We only send values that actually exist.
-    We do NOT fabricate missing telemetry.
-    """
-
-    mapped = {}
-
-    # Direct mappings
-    if "temperature" in telemetry:
-        mapped["battery_temp"] = telemetry["temperature"]
-
-    if "battery_voltage" in telemetry:
-        mapped["battery_voltage"] = telemetry["battery_voltage"]
-
-    if "reaction_wheel_rpm" in telemetry:
-        mapped["wheel_speed"] = telemetry["reaction_wheel_rpm"]
-
-    if "solar_power" in telemetry:
-        mapped["solar_power"] = telemetry["solar_power"]
-
-    # These fields are intentionally NOT fabricated:
-    #
-    # battery_soc
-    # attitude_error
-    # comm_snr
-    #
-    # They will only be included if real telemetry is available.
-
-    return mapped
-
-
-# ============================================================
-# BUILD TELEMETRY HISTORY
-# ============================================================
-
-def build_telemetry_history(telemetry_data):
-    """
-    Create the telemetry_history structure expected by the
-    backend Diagnostic Agent.
-    """
-
-    telemetry = telemetry_data["telemetry"]
-
-    mapped = map_telemetry_to_backend(telemetry)
-
-    mapped["satellite_id"] = telemetry_data["satellite_id"]
-    mapped["timestamp"] = telemetry_data["timestamp"]
-
-    return [mapped]
-
-
-# ============================================================
-# BUILD ANOMALY EVENT
-# ============================================================
-
-def build_anomaly_event(telemetry_data, anomalies):
-    """
-    Convert detector output into the backend AnomalyEvent format.
-    """
-
-    satellite_id = telemetry_data["satellite_id"]
-    timestamp = telemetry_data["timestamp"]
-
-    incident_id = generate_incident_id(
-        satellite_id,
-        timestamp
-    )
-
-    # No anomaly detected
-    if not anomalies:
-        return None
-
-    primary_anomaly = anomalies[0]
-
-    evidence = [
-        {
-            "metric": primary_anomaly["parameter"],
-            "value": primary_anomaly["value"],
-            "threshold": primary_anomaly["threshold"]
-        }
-    ]
-
-    anomaly_event = {
-        "incident_id": incident_id,
-        "satellite_id": satellite_id,
-        "anomaly_type": primary_anomaly["type"],
-        "severity": primary_anomaly["severity"],
-
-        # Our detector is deterministic.
-        # Therefore its detection confidence is 1.0.
-        "confidence": 1.0,
-
-        "status": "DETECTED",
-
-        "started_at": timestamp,
-
-        "evidence": evidence
+    mapping = {
+        "HIGH_TEMPERATURE": "battery_overheat",
+        "LOW_BATTERY": "low_battery",
+        "REACTION_WHEEL_OVERLOAD": "wheel_degradation",
+        "WHEEL_DEGRADATION": "wheel_degradation",
+        "battery_overheat": "battery_overheat",
+        "low_battery": "low_battery",
+        "wheel_degradation": "wheel_degradation",
     }
 
-    return anomaly_event
+    backend_anomaly = mapping.get(anomaly_type)
+
+    if backend_anomaly is None:
+        raise ValueError(
+            f"Unsupported AIML anomaly type: "
+            f"{anomaly_type}"
+        )
+
+    return backend_anomaly
 
 
 # ============================================================
-# BUILD COMPLETE BACKEND PAYLOAD
+# CHECK BACKEND
 # ============================================================
 
-def build_backend_payload(telemetry_data, anomalies):
-    """
-    Build the complete payload required by the backend
-    Diagnostic Agent.
-    """
+def check_backend():
 
-    anomaly_event = build_anomaly_event(
-        telemetry_data,
-        anomalies
+    response = requests.get(
+        f"{BACKEND_URL}/api/health",
+        timeout=5,
     )
 
-    if anomaly_event is None:
-        return None
+    response.raise_for_status()
 
-    telemetry_history = build_telemetry_history(
-        telemetry_data
+    return response.json()
+
+
+# ============================================================
+# RESET BACKEND SIMULATOR
+# ============================================================
+
+def reset_backend():
+
+    response = requests.post(
+        f"{BACKEND_URL}/api/simulate/reset",
+        timeout=5,
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+# ============================================================
+# INJECT ANOMALY
+# ============================================================
+
+def inject_anomaly(anomaly_type):
+
+    backend_anomaly = map_anomaly_type(
+        anomaly_type
     )
 
     payload = {
-        "anomaly_event": anomaly_event,
-        "telemetry_history": telemetry_history
+        "satellite_id": SATELLITE_ID,
+        "anomaly_type": backend_anomaly,
     }
 
-    return payload
+    response = requests.post(
+        f"{BACKEND_URL}/api/simulate/inject",
+        json=payload,
+        timeout=5,
+    )
+
+    response.raise_for_status()
+
+    return response.json()
 
 
 # ============================================================
-# MAIN
+# GENERATE TELEMETRY
+# ============================================================
+
+def generate_telemetry():
+
+    # Give the simulator time to apply
+    # the injected scenario.
+    time.sleep(1)
+
+    response = requests.get(
+        f"{BACKEND_URL}/api/telemetry/{SATELLITE_ID}",
+        params={
+            "window": 5,
+            "generate": 5,
+        },
+        timeout=10,
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+# ============================================================
+# GET INCIDENTS
+# ============================================================
+
+def get_incidents():
+
+    response = requests.get(
+        f"{BACKEND_URL}/api/incidents",
+        timeout=5,
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+# ============================================================
+# ANALYZE INCIDENT
+# ============================================================
+
+def analyze_incident(incident_id):
+
+    payload = {
+        "incident_id": incident_id
+    }
+
+    response = requests.post(
+        f"{BACKEND_URL}/api/incidents/analyze",
+        json=payload,
+        timeout=60,
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+# ============================================================
+# FIND LATEST INCIDENT
+# ============================================================
+
+def find_latest_incident(incidents):
+
+    if not incidents:
+        return None
+
+    return incidents[0]
+
+
+# ============================================================
+# MAIN AIML → BACKEND PIPELINE
+# ============================================================
+
+def run_pipeline(file_name):
+
+    print("\n========================================")
+    print("      ORBITGUARD AIML PIPELINE")
+    print("========================================\n")
+
+    # --------------------------------------------------------
+    # 1. Load AIML telemetry
+    # --------------------------------------------------------
+
+    print("[1/7] Loading AIML telemetry...")
+
+    telemetry_data = load_telemetry(
+        file_name
+    )
+
+    print(
+        f"Satellite: "
+        f"{telemetry_data['satellite_id']}"
+    )
+
+    # --------------------------------------------------------
+    # 2. Run AIML detector
+    # --------------------------------------------------------
+
+    print(
+        "\n[2/7] Running AIML anomaly detector..."
+    )
+
+    anomalies = detect_anomalies(
+        telemetry_data
+    )
+
+    if not anomalies:
+
+        print(
+            "No anomaly detected by AIML."
+        )
+
+        print(
+            "Pipeline stopped."
+        )
+
+        return
+
+    primary_anomaly = anomalies[0]
+
+    print(
+        f"Detected: "
+        f"{primary_anomaly['type']}"
+    )
+
+    print(
+        f"Severity: "
+        f"{primary_anomaly['severity']}"
+    )
+
+    print(
+        f"Value: "
+        f"{primary_anomaly['value']}"
+    )
+
+    print(
+        f"Threshold: "
+        f"{primary_anomaly['threshold']}"
+    )
+
+    # --------------------------------------------------------
+    # 3. Check backend
+    # --------------------------------------------------------
+
+    print(
+        "\n[3/7] Connecting to backend..."
+    )
+
+    health = check_backend()
+
+    print(
+        "Backend:",
+        health,
+    )
+
+    # --------------------------------------------------------
+    # 4. Reset backend simulator
+    # --------------------------------------------------------
+
+    print(
+        "\n[4/7] Resetting backend simulator..."
+    )
+
+    reset_result = reset_backend()
+
+    print(
+        "Reset:",
+        reset_result.get(
+            "status",
+            "unknown",
+        ),
+    )
+
+    # --------------------------------------------------------
+    # 5. Inject matching backend scenario
+    # --------------------------------------------------------
+
+    print(
+        "\n[5/7] Injecting AIML anomaly into backend..."
+    )
+
+    injection_result = inject_anomaly(
+        primary_anomaly["type"]
+    )
+
+    print(
+        "Backend anomaly:",
+        injection_result["anomaly_type"],
+    )
+
+    # --------------------------------------------------------
+    # 6. Generate backend telemetry
+    # --------------------------------------------------------
+
+    print(
+        "\n[6/7] Generating backend telemetry..."
+    )
+
+    telemetry_result = generate_telemetry()
+
+    print(
+        "Generated/returned readings:",
+        telemetry_result["readings"],
+    )
+
+    print(
+        "Backend anomalies detected:",
+        len(
+            telemetry_result[
+                "anomalies_detected"
+            ]
+        ),
+    )
+
+    # --------------------------------------------------------
+    # 7. Retrieve and analyze incident
+    # --------------------------------------------------------
+
+    print(
+        "\n[7/7] Retrieving backend incident..."
+    )
+
+    incidents = get_incidents()
+
+    incident = find_latest_incident(
+        incidents
+    )
+
+    if incident is None:
+
+        print(
+            "\nERROR: Backend did not create "
+            "an incident."
+        )
+
+        return
+
+    incident_id = incident[
+        "incident_id"
+    ]
+
+    print(
+        f"Incident ID: {incident_id}"
+    )
+
+    print(
+        "\nSending incident to Diagnostic Agent..."
+    )
+
+    analysis = analyze_incident(
+        incident_id
+    )
+
+    print(
+        "\n========================================"
+    )
+
+    print(
+        "       ANALYSIS COMPLETE"
+    )
+
+    print(
+        "========================================\n"
+    )
+
+    print(
+        json.dumps(
+            analysis,
+            indent=2,
+        )
+    )
+
+
+# ============================================================
+# COMMAND LINE ENTRY POINT
 # ============================================================
 
 if __name__ == "__main__":
 
     if len(sys.argv) != 2:
+
         print("Usage:")
+
         print(
-            "python -m ai_ml.integration.backend_adapter "
+            "python -m "
+            "ai_ml.integration.backend_adapter "
             "<filename>"
         )
+
         print()
+
         print("Example:")
+
         print(
-            "python -m ai_ml.integration.backend_adapter "
+            "python -m "
+            "ai_ml.integration.backend_adapter "
             "low_battery.json"
         )
+
         sys.exit(1)
 
     file_name = sys.argv[1]
 
     try:
-        telemetry_data = load_telemetry(file_name)
 
-    except FileNotFoundError as error:
-        print(f"ERROR: {error}")
+        run_pipeline(file_name)
+
+    except requests.exceptions.ConnectionError:
+
+        print(
+            "\nERROR: Could not connect to backend."
+        )
+
+        print(
+            "Make sure the backend is running on "
+            f"{BACKEND_URL}"
+        )
+
         sys.exit(1)
 
-    # Run our deterministic detector
-    anomalies = detect_anomalies(
-        telemetry_data
-    )
+    except requests.exceptions.HTTPError as error:
 
-    # Build backend-compatible payload
-    payload = build_backend_payload(
-        telemetry_data,
-        anomalies
-    )
-
-    print("\n================================")
-    print("     ORBITGUARD BACKEND ADAPTER")
-    print("================================\n")
-
-    if payload is None:
-        print("No anomaly detected.")
-        print("Nothing to send to the backend.")
-        sys.exit(0)
-
-    print("Backend Diagnostic Agent Payload:")
-    print()
-
-    print(
-        json.dumps(
-            payload,
-            indent=2
+        print(
+            "\nERROR: Backend returned an HTTP error:"
         )
-    )
+
+        print(error)
+
+        sys.exit(1)
+
+    except FileNotFoundError as error:
+
+        print(
+            f"\nERROR: {error}"
+        )
+
+        sys.exit(1)
+
+    except Exception as error:
+
+        print(
+            f"\nERROR: Pipeline failed: {error}"
+        )
+
+        sys.exit(1)
