@@ -8,6 +8,7 @@ import { AgentMeshScreen } from './components/AgentMeshScreen';
 import { ChaosAnomalyLabScreen } from './components/ChaosAnomalyLabScreen';
 import { AnalyticsScreen } from './components/AnalyticsScreen';
 import { PropellantlessControlScreen } from './components/PropellantlessControlScreen';
+import { OrbitalCaseSimulatorScreen } from './components/OrbitalCaseSimulatorScreen';
 import { sound } from './utils/audio';
 
 export default function App() {
@@ -109,6 +110,8 @@ export default function App() {
             )}
 
             {activeScreen === 'propellantless' && <PropellantlessControlScreen />}
+
+            {activeScreen === 'orbital-cases' && <OrbitalCaseSimulatorScreen />}
 
             {activeScreen === 'analytics' && <AnalyticsScreen agents={agents} />}
           </div>

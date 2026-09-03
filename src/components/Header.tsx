@@ -17,6 +17,7 @@ import {
   Activity,
   PanelLeftClose,
   Wind,
+  History,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -52,6 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'agent-mesh', label: 'Agent Mesh', icon: Cpu },
     { id: 'anomaly-lab', label: 'Chaos Lab', icon: Flame },
     { id: 'propellantless', label: 'Propellantless', icon: Wind },
+    { id: 'orbital-cases', label: 'Case Simulator', icon: History },
     { id: 'analytics', label: 'Analytics', icon: Activity },
   ];
 

@@ -16,6 +16,7 @@ import {
   PanelLeftClose,
   X,
   Wind,
+  History,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -66,6 +67,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       subtitle: 'Solar Sail, EDT & Aerotrim',
       icon: Wind,
       badge: 'FUEL-0',
+    },
+    {
+      id: 'orbital-cases',
+      title: 'Orbital Case Simulator',
+      subtitle: 'Simulate Ingested Flight Cases',
+      icon: History,
+      badge: 'SIM',
     },
     {
       id: 'analytics',
