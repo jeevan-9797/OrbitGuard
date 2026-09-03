@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Real-time aerospace digital twin, multi-agent swarm mission operations console, and propellantless trajectory correction laboratory for LEO satellite ASTRA-7.",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "keywords": [
     "aerospace",

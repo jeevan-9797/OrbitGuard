@@ -6,7 +6,8 @@
 [![Express](https://img.shields.io/badge/Express-4.21-000000.svg?logo=express)](https://expressjs.com/)
 [![Google GenAI](https://img.shields.io/badge/Google%20GenAI-Gemini%20Flash-orange.svg?logo=google)](https://ai.google.dev/)
 [![OrbitGuard API](https://img.shields.io/badge/OrbitGuard-Integrated-green.svg)](https://orbitguard-kt7a.onrender.com)
-[![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/IP-Patent%20Pending-critical.svg)](LICENSE)
 
 An aerospace-grade, real-time digital twin, multi-agent autonomous swarm mission operations console, and propellantless orbital mechanics laboratory for Low Earth Orbit (LEO) satellite **ASTRA-7** (NORAD ID: 59402, 545 km circular orbit, 51.6° inclination).
 
@@ -206,6 +207,10 @@ npm run lint
 
 ---
 
-## License
+## Intellectual Property & Licensing
 
-This project is licensed under the [MIT License](LICENSE).
+**Proprietary and Confidential — Patent Pending / All Rights Reserved.**
+
+Copyright © 2026 Team 098. All rights reserved.
+
+No license, express or implied, is granted for public redistribution, modification, commercial use, or reverse engineering of the proprietary algorithms, orbital mechanics control models, digital twin architectures, or safety interlock state machines.
