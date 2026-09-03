@@ -27,10 +27,7 @@ app.add_middleware(
 )
 
 # ── Routers ──────────────────────────────────────────────────────────────────
-# Mount health check with /api prefix so /api/health succeeds
-app.include_router(health_router, prefix="/api")
-
-# Include remaining routers
+app.include_router(health_router)
 app.include_router(simulator_router)
 app.include_router(agents_router)
 app.include_router(validation_router)

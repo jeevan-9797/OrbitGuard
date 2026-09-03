@@ -7,7 +7,8 @@ from fastapi import APIRouter
 
 from app.core.config import settings
 
-router = APIRouter(prefix="/api", tags=["health"])
+# Removed prefix="/api" to prevent duplicate route prefixes (/api/api/health)
+router = APIRouter(tags=["health"])
 
 
 async def _check_supabase() -> str:
@@ -34,6 +35,7 @@ def _check_llm() -> str:
 
 
 @router.get("/health")
+@router.get("/api/health")
 async def health_check() -> dict:
     """Return current system health status.
 
