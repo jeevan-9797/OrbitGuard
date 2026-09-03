@@ -109,6 +109,46 @@ class SoundEngine {
       // Ignore
     }
   }
+
+  public playAlarm() {
+    if (!this.enabled) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
+      // High-low alarm dual-tone for catastrophic event
+      const osc1 = this.ctx.createOscillator();
+      const osc2 = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc1.type = 'sawtooth';
+      osc2.type = 'sawtooth';
+
+      const now = this.ctx.currentTime;
+      osc1.frequency.setValueAtTime(880, now);
+      osc1.frequency.setValueAtTime(440, now + 0.15);
+      osc1.frequency.setValueAtTime(880, now + 0.3);
+      osc1.frequency.setValueAtTime(440, now + 0.45);
+
+      osc2.frequency.setValueAtTime(440, now);
+      osc2.frequency.setValueAtTime(220, now + 0.15);
+      osc2.frequency.setValueAtTime(440, now + 0.3);
+      osc2.frequency.setValueAtTime(220, now + 0.45);
+
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.6);
+      osc2.stop(now + 0.6);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export const sound = new SoundEngine();

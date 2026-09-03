@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AnomalyPreset, CoTLogEntry } from '../types';
-import { ANOMALY_PRESETS } from '../data/mockFlightData';
+import { AnomalyPreset, CoTLogEntry, AgentStatus } from '../types';
+import { ANOMALY_PRESETS, INITIAL_AGENTS } from '../data/mockFlightData';
 import { sound } from '../utils/audio';
 import { VideogameLoadingSlider } from './VideogameLoadingSlider';
 import {
@@ -13,18 +13,86 @@ import {
   Gauge,
   Send,
   Zap,
+  ShieldAlert,
+  Power,
+  Radio,
+  XCircle,
+  Activity,
 } from 'lucide-react';
+
+export interface DomainMapping {
+  agentId: 'alpha' | 'beta' | 'gamma' | 'delta';
+  agentName: string;
+  governedParameter: string;
+  telemetryMetric: string;
+  catastrophicMechanism: string;
+}
+
+export const SUBSYSTEM_DOMAIN_MAP: Record<string, DomainMapping> = {
+  thermal: {
+    agentId: 'alpha',
+    agentName: 'Agent Alpha::Thermal',
+    governedParameter: 'Thermal Gradients & Cryo-Radiator Loop',
+    telemetryMetric: 'Battery Pack Temperature (EPS_BATT_TEMP_CELL04)',
+    catastrophicMechanism:
+      'Thermal runaway: Battery core exceeds 85°C critical limit, resulting in cell pouch rupture, catastrophic outgassing, and total power bus collapse.',
+  },
+  sada: {
+    agentId: 'alpha',
+    agentName: 'Agent Alpha::Thermal',
+    governedParameter: 'Solar Array Drive Assembly & Bus Voltage',
+    telemetryMetric: 'Solar Power Generation (EPS_SOLAR_HARVEST_W)',
+    catastrophicMechanism:
+      'Deep bus undervoltage: SADA drive stall uncorrected, vehicle bus collapses below 18V shutdown threshold leading to permanent battery death.',
+  },
+  adcs: {
+    agentId: 'beta',
+    agentName: 'Agent Beta::AOCS',
+    governedParameter: 'Attitude Determination & Control (AOCS) & Reaction Wheels',
+    telemetryMetric: 'Z-Axis Angular Drift Rate (ADCS_GYRO_Z_RATE)',
+    catastrophicMechanism:
+      'Uncontrolled flat-spin tumble: Reaction wheel saturation uncompensated by magnetorquers, angular rates exceed 15°/s, destroying star-tracker lock and solar pointing.',
+  },
+  collision: {
+    agentId: 'gamma',
+    agentName: 'Agent Gamma::Prop',
+    governedParameter: 'Orbital Semi-Major Axis & RCS Delta-V Injection',
+    telemetryMetric: 'Semi-Major Axis Altitude (ORBIT_SEMI_MAJOR_AXIS)',
+    catastrophicMechanism:
+      'Runaway perigee decay: Space object collision impulse unmitigated by RCS burn, vehicle descends past 530km re-entry hazard line into dense mesosphere.',
+  },
+  drag: {
+    agentId: 'gamma',
+    agentName: 'Agent Gamma::Prop',
+    governedParameter: 'Atmospheric Drag Resistance & Orbit Circularization',
+    telemetryMetric: 'LEO GPS Altitude (GPS_LEO_ALTITUDE_MSL)',
+    catastrophicMechanism:
+      'Thermospheric drag plunge: Solar storm density surge uncompensated by station-keeping burn, leading to irreversible orbital re-entry.',
+  },
+  thruster: {
+    agentId: 'gamma',
+    agentName: 'Agent Gamma::Prop',
+    governedParameter: 'RCS Hydrazine Manifold & Solenoid Pulse Control',
+    telemetryMetric: 'Valve #3 Manifold Pressure (PROP_RCS_VALVE_03_PRESSURE)',
+    catastrophicMechanism:
+      'Hydrazine blowdown & wild tumble: Solenoid valve #3 stuck open dumps remaining fuel supply, causing unrecoverable rotational velocity.',
+  },
+};
 
 interface ChaosAnomalyLabScreenProps {
   selectedPresetId?: string;
   onPresetChange?: (presetId: string) => void;
   onUpdateAlertCount?: (crit: number, warn: number) => void;
+  agents?: AgentStatus[];
+  onToggleAgentIsolation?: (agentId: string) => void;
 }
 
 export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
   selectedPresetId = 'thermal',
   onPresetChange,
   onUpdateAlertCount,
+  agents = INITIAL_AGENTS,
+  onToggleAgentIsolation,
 }) => {
   const [activePreset, setActivePreset] = useState<AnomalyPreset>(
     ANOMALY_PRESETS.find((p) => p.id === selectedPresetId) || ANOMALY_PRESETS[0]
@@ -37,10 +105,14 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
 
   const [simRunning, setSimRunning] = useState<boolean>(false);
   const [simTime, setSimTime] = useState<number>(0);
-  const [simStage, setSimStage] = useState<'idle' | 'injected' | 'detected' | 'mitigating' | 'remediated'>('idle');
+  const [simStage, setSimStage] = useState<
+    'idle' | 'injected' | 'detected' | 'mitigating' | 'remediated' | 'catastrophic_failure'
+  >('idle');
 
   const simTimeRef = useRef<number>(0);
-  const simStageRef = useRef<'idle' | 'injected' | 'detected' | 'mitigating' | 'remediated'>('idle');
+  const simStageRef = useRef<
+    'idle' | 'injected' | 'detected' | 'mitigating' | 'remediated' | 'catastrophic_failure'
+  >('idle');
   const simRunningRef = useRef<boolean>(false);
   const initialMountRef = useRef<boolean>(true);
 
@@ -48,6 +120,30 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
   const [customOverrideInput, setCustomOverrideInput] = useState<string>('');
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const journalContainerRef = useRef<HTMLDivElement>(null);
+
+  // Determine domain agent responsibilities and offline status
+  const domainInfo = SUBSYSTEM_DOMAIN_MAP[activePreset.id] || {
+    agentId: 'gamma' as const,
+    agentName: 'Agent Gamma::Prop',
+    governedParameter: activePreset.subsystem,
+    telemetryMetric: activePreset.telemetryChannel,
+    catastrophicMechanism: 'Subsystem parameters breach flight safety limits.',
+  };
+
+  const governingAgent = agents.find((a) => a.id === domainInfo.agentId);
+  const deltaAgent = agents.find((a) => a.id === 'delta');
+
+  const isGoverningAgentOffline = governingAgent?.isolated ?? false;
+  const isFdirOffline = (deltaAgent?.isolated ?? false) && domainInfo.agentId !== 'delta';
+  const isCatastrophic = isGoverningAgentOffline || isFdirOffline || autonomySetting === 'suppressed';
+
+  const failureReason = isGoverningAgentOffline
+    ? `Primary domain agent [${governingAgent?.name}] is OFFLINE / ISOLATED. Subsystem actuators uncommanded.`
+    : isFdirOffline
+    ? `Supervisory agent [Agent Delta::FDIR] is OFFLINE. Raft-BFT consensus quorum lost (0/4 nodes signed).`
+    : autonomySetting === 'suppressed'
+    ? 'Swarm autonomy is SUPPRESSED (open-loop mode).'
+    : null;
 
   const effectiveMitigationTime =
     autonomySetting === 'hitl'
@@ -94,8 +190,8 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
     setSimStage('injected');
 
     if (onUpdateAlertCount) {
-      const crit = severityLevel >= 3 ? 1 : 0;
-      const warn = severityLevel <= 2 ? 1 : 0;
+      const crit = isCatastrophic || severityLevel >= 3 ? 1 : 0;
+      const warn = severityLevel <= 2 && !isCatastrophic ? 1 : 0;
       setTimeout(() => onUpdateAlertCount(crit, warn), 0);
     }
 
@@ -107,7 +203,13 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
       tagColor: 'bg-amber-500/20 text-amber-300',
       message: `[INJECTION EVENT] ${activePreset.title} injected at severity Level ${severityLevel} (${Math.round(
         (severityLevel / 4) * 100
-      )}%). Target: ${activePreset.telemetryChannel}. Autonomy: ${autonomySetting.toUpperCase()}.`,
+      )}%). Target: ${activePreset.telemetryChannel}. ${
+        isGoverningAgentOffline
+          ? `⚠️ CRITICAL: Domain agent ${governingAgent?.name} is OFFLINE! Anomaly cannot be corrected and will lead to catastrophic vehicle failure.`
+          : isFdirOffline
+          ? '⚠️ CRITICAL: Consensus node Agent Delta::FDIR is OFFLINE! Byzantine consensus cannot form.'
+          : 'All governing mesh nodes ONLINE.'
+      }`,
     };
     setJournalLogs([initialEntry]);
   };
@@ -123,7 +225,7 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
 
       const curStage = simStageRef.current;
 
-      if (autonomySetting === 'suppressed') {
+      if (isCatastrophic) {
         if (nextTime >= activePreset.detectionTime && curStage === 'injected') {
           simStageRef.current = 'detected';
           setSimStage('detected');
@@ -131,6 +233,51 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
           if (onUpdateAlertCount) {
             setTimeout(() => onUpdateAlertCount(1, 0), 0);
           }
+        } else if (
+          nextTime >= effectiveMitigationTime &&
+          curStage !== 'catastrophic_failure'
+        ) {
+          simStageRef.current = 'catastrophic_failure';
+          setSimStage('catastrophic_failure');
+          sound.playAlarm();
+          if (onUpdateAlertCount) {
+            setTimeout(() => onUpdateAlertCount(1, 0), 0);
+          }
+
+          // Inject immediate catastrophic failure logs
+          const fatalTimeStr = `+00:${String(Math.floor(nextTime)).padStart(2, '0')}.${String(
+            Math.floor((nextTime % 1) * 100)
+          ).padStart(2, '0')}`;
+
+          const fatalEntry: CoTLogEntry = {
+            id: `log-${Date.now()}-fatal1`,
+            timestamp: fatalTimeStr,
+            agent: isGoverningAgentOffline
+              ? (governingAgent?.name || 'SWARM_GOVERNOR')
+              : isFdirOffline
+              ? 'Agent Delta::FDIR'
+              : 'FLIGHT_SAFETY',
+            tag: 'CATASTROPHIC_FAIL',
+            tagColor: 'bg-rose-600 text-white font-black animate-pulse',
+            message: `🚨 REMEDIATION FAILED: ${
+              isGoverningAgentOffline
+                ? `Governing node [${governingAgent?.name}] is OFFLINE / ISOLATED! Subsystem actuators uncommanded.`
+                : isFdirOffline
+                ? 'Supervisor [Agent Delta::FDIR] is OFFLINE. Raft-BFT consensus quorum lost (0/4 nodes signed).'
+                : 'Autonomous mitigation disabled.'
+            } Parameter diverging into unrecoverable catastrophic failure!`,
+          };
+
+          const fatalEntry2: CoTLogEntry = {
+            id: `log-${Date.now()}-fatal2`,
+            timestamp: fatalTimeStr,
+            agent: 'MISSION_CONTROL',
+            tag: 'RUNAWAY_BREACH',
+            tagColor: 'bg-rose-950 text-rose-300 border border-rose-500',
+            message: `FATAL BREACH: ${domainInfo.catastrophicMechanism}`,
+          };
+
+          setJournalLogs((prev) => [...prev, fatalEntry, fatalEntry2]);
         }
       } else {
         if (nextTime >= effectiveRecoveryTime && curStage !== 'remediated') {
@@ -162,12 +309,12 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
 
       if (matchingLog) {
         if (
-          autonomySetting === 'suppressed' &&
+          isCatastrophic &&
           (matchingLog.tag === 'CONSENSUS' ||
             matchingLog.tag === 'DISPATCH' ||
             matchingLog.tag === 'REMEDIATED')
         ) {
-          // Skip automated mitigation logs
+          // Suppress successful consensus/remediation logs when failure condition is active
         } else {
           setJournalLogs((current) => {
             if (current.some((e) => e.message === matchingLog.message)) return current;
@@ -204,6 +351,11 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
     autonomySetting,
     effectiveMitigationTime,
     effectiveRecoveryTime,
+    isCatastrophic,
+    isGoverningAgentOffline,
+    isFdirOffline,
+    governingAgent,
+    domainInfo,
   ]);
 
   useEffect(() => {
@@ -243,6 +395,8 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
         ? (Math.sin(t * 22.3 + 0.5) * 0.6 + Math.cos(t * 43.1 + 1.2) * 0.4) * noiseScale
         : 0;
 
+    const isFailureRun = isUncorrected || isCatastrophic;
+
     if (activePreset.id === 'collision') {
       const nominalAltY = 60;
       const impactDrop = 45 + (severityLevel - 1) * 20;
@@ -253,9 +407,9 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
 
       const timeSinceImpact = t - 1.6;
 
-      if (isUncorrected || autonomySetting === 'suppressed') {
+      if (isFailureRun) {
         const dropProgress = Math.min(1.0, timeSinceImpact / 0.4);
-        const continuousDecay = (timeSinceImpact / 13.4) * 35;
+        const continuousDecay = (timeSinceImpact / 13.4) * 48;
         return nominalAltY + impactDrop * dropProgress + continuousDecay + jitter;
       }
 
@@ -277,10 +431,10 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
     const sFactor = severityLevel / 4;
     const maxDeflection = 60 * sFactor + (severityLevel === 4 ? 35 : 0);
 
-    if (isUncorrected || autonomySetting === 'suppressed') {
+    if (isFailureRun) {
       if (t <= 0) return baselineY;
       const progress = Math.min(1.0, t / 10.0);
-      const unmitigated = Math.min(140, maxDeflection * 1.45 * Math.pow(progress, 1.25));
+      const unmitigated = Math.min(140, maxDeflection * 1.55 * Math.pow(progress, 1.25));
       return Math.max(12, baselineY - unmitigated + jitter);
     }
 
@@ -312,8 +466,8 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
       const dropKm = (dropPx * 0.0894).toFixed(2);
       const currentAlt = (541.80 - parseFloat(dropKm)).toFixed(2);
 
-      if (autonomySetting === 'suppressed' && t > 1.6) {
-        return `${currentAlt} km (-${dropKm} km runaway decay)`;
+      if (isCatastrophic && t > 1.6) {
+        return `${currentAlt} km (-${dropKm} km RUNAWAY RE-ENTRY DECAY)`;
       }
       if (t < effectiveMitigationTime) {
         return `${currentAlt} km (-${dropKm} km drop)`;
@@ -332,24 +486,34 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
     if (activePreset.id === 'thermal') {
       const base = 21.2;
       const peak = base + (48.9 - base) * (severityLevel / 3) * norm;
-      return `${peak.toFixed(1)} °C`;
+      return isCatastrophic && t >= effectiveMitigationTime
+        ? `${peak.toFixed(1)} °C (THERMAL RUNAWAY)`
+        : `${peak.toFixed(1)} °C`;
     }
     if (activePreset.id === 'adcs') {
       const peak = 14.2 * (severityLevel / 2) * norm;
-      return `+${peak.toFixed(2)}°/s drift`;
+      return isCatastrophic && t >= effectiveMitigationTime
+        ? `+${peak.toFixed(2)}°/s (UNCONTROLLED TUMBLE)`
+        : `+${peak.toFixed(2)}°/s drift`;
     }
     if (activePreset.id === 'drag') {
       const lossM = Math.round(128 * (severityLevel / 3) * norm);
       const altKm = (541.8 - lossM / 1000).toFixed(2);
-      return `${altKm} km (-${lossM}m)`;
+      return isCatastrophic && t >= effectiveMitigationTime
+        ? `${altKm} km (TERMINAL RE-ENTRY)`
+        : `${altKm} km (-${lossM}m)`;
     }
     if (activePreset.id === 'thruster') {
       const thrust = (3.8 * (severityLevel / 4) * norm).toFixed(1);
-      return `+${thrust} N continuous`;
+      return isCatastrophic && t >= effectiveMitigationTime
+        ? `+${thrust} N (PROPELLANT VENTING RUNAWAY)`
+        : `+${thrust} N continuous`;
     }
     if (activePreset.id === 'sada') {
       const lossW = Math.round(930 * (severityLevel / 2) * norm);
-      return `${2420 - lossW} W`;
+      return isCatastrophic && t >= effectiveMitigationTime
+        ? `${2420 - lossW} W (BUS BROWNOUT HAZARD)`
+        : `${2420 - lossW} W`;
     }
     return activePreset.faultMetric;
   };
@@ -360,7 +524,10 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
   let liveStatusColor = 'text-green-400 font-bold';
   let dynamicAuraIntensity = 0;
 
-  if (autonomySetting === 'suppressed' && simTime > activePreset.detectionTime) {
+  if (simStage === 'catastrophic_failure' || (isCatastrophic && simTime >= effectiveMitigationTime)) {
+    liveStatusColor = 'text-rose-500 font-extrabold animate-pulse';
+    dynamicAuraIntensity = 0.85;
+  } else if (autonomySetting === 'suppressed' && simTime > activePreset.detectionTime) {
     liveStatusColor = 'text-rose-500 font-bold animate-pulse';
     dynamicAuraIntensity = 0.6;
   } else if (simStage === 'injected' || simStage === 'detected') {
@@ -508,6 +675,170 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
         </div>
       </div>
 
+      {/* Swarm Agent Governance & Kill-Switch Matrix */}
+      <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl flex flex-col gap-3 shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1e293b]/60 pb-3">
+          <div className="flex items-center gap-2">
+            <Cpu size={16} className="text-cyan-400" />
+            <span className="text-xs uppercase text-slate-200 font-semibold tracking-wide">
+              SWARM AGENT GOVERNANCE & DOMAIN KILL-SWITCH MATRIX
+            </span>
+            <span className="text-[10px] font-mono text-slate-400">
+              (ISOLATE AGENTS TO SIMULATE CATASTROPHIC FAILURE)
+            </span>
+          </div>
+          {isCatastrophic ? (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/50 animate-pulse flex items-center gap-1.5">
+              <ShieldAlert size={12} />
+              CATASTROPHIC FAILURE ARMED
+            </span>
+          ) : (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-green-500/10 text-green-400 border border-green-500/30 flex items-center gap-1.5">
+              <CheckCircle2 size={12} />
+              ALL DOMAIN AGENTS ONLINE // CLOSED-LOOP ARMED
+            </span>
+          )}
+        </div>
+
+        {/* Warning Callout when failure condition exists */}
+        {isCatastrophic && (
+          <div className="bg-rose-950/40 border border-rose-500/60 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs font-mono">
+            <div className="flex items-center gap-2 text-rose-200">
+              <ShieldAlert size={16} className="text-rose-400 shrink-0 animate-pulse" />
+              <span>
+                <strong>CRITICAL INTERDEPENDENCY WARNING:</strong> {failureReason} Any anomaly injected under this domain will <strong>FAIL TO BE CORRECTED</strong> and trigger <strong>CATASTROPHIC FAILURE</strong>.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* 4 Agent Nodes Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-mono">
+          {agents.map((agent) => {
+            const isDomainGovernor = domainInfo.agentId === agent.id;
+            const isOffline = agent.isolated;
+
+            return (
+              <div
+                key={agent.id}
+                className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-2 shadow-sm ${
+                  isOffline
+                    ? 'bg-rose-950/25 border-rose-500/70 text-rose-200 ring-1 ring-rose-500/40'
+                    : isDomainGovernor
+                    ? 'bg-[#05070a] border-cyan-500/70 text-white ring-1 ring-cyan-500/25'
+                    : 'bg-[#05070a] border-[#1e293b] text-slate-300'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-cyan-400 truncate">
+                      {agent.name}
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                        isOffline
+                          ? 'bg-rose-600 text-white animate-pulse'
+                          : 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      }`}
+                    >
+                      {isOffline ? 'OFFLINE' : 'ONLINE'}
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] font-semibold text-slate-100 mt-1">
+                    {agent.subsystem}
+                  </div>
+
+                  <div className="text-[9px] text-slate-400 mt-0.5">
+                    {agent.id === 'alpha' && 'Governs: Thermal loop & Solar power harvesting'}
+                    {agent.id === 'beta' && 'Governs: Attitude rates & Reaction wheels (AOCS)'}
+                    {agent.id === 'gamma' && 'Governs: Orbital altitude, Drag & RCS thrust'}
+                    {agent.id === 'delta' && 'Governs: FDIR diagnosis & Swarm BFT consensus'}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-[#1e293b]/60 flex flex-col gap-1.5">
+                  {isDomainGovernor && (
+                    <div
+                      className={`text-[9px] font-bold flex items-center gap-1 ${
+                        isOffline ? 'text-rose-400 animate-pulse' : 'text-amber-400'
+                      }`}
+                    >
+                      <span>🎯 GOVERNS ACTIVE FAULT</span>
+                      {isOffline && <span>(DISABLED)</span>}
+                    </div>
+                  )}
+
+                  {agent.id === 'delta' && !isDomainGovernor && (
+                    <div
+                      className={`text-[9px] font-bold ${
+                        isOffline ? 'text-rose-400 animate-pulse' : 'text-slate-400'
+                      }`}
+                    >
+                      {isOffline ? '⚠️ QUORUM SEVERED (ALL FAIL)' : 'BFT CONSENSUS SUPERVISOR'}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      sound.playClick();
+                      if (onToggleAgentIsolation) {
+                        onToggleAgentIsolation(agent.id);
+                      }
+                    }}
+                    className={`w-full py-1.5 px-2.5 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      isOffline
+                        ? 'bg-green-500 hover:bg-green-400 text-black font-extrabold shadow-sm'
+                        : 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40'
+                    }`}
+                  >
+                    <Power size={11} />
+                    {isOffline ? 'RESTORE AGENT' : 'DISABLE / ISOLATE'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Catastrophic Failure Active Banner */}
+      {simStage === 'catastrophic_failure' && (
+        <div className="bg-rose-950/90 border-2 border-rose-500 p-4 rounded-3xl flex flex-wrap items-center justify-between gap-4 shadow-[0_0_35px_rgba(244,63,94,0.45)] animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-rose-600 text-white font-black shadow-md">
+              <ShieldAlert size={26} />
+            </div>
+            <div className="flex flex-col">
+              <div className="text-sm font-bold font-mono text-white tracking-wider flex items-center gap-2">
+                <span>🚨 CATASTROPHIC FAILURE // VEHICLE LOSS CONFIRMED</span>
+                <span className="px-2 py-0.5 rounded-md bg-rose-500 text-white text-[9px] font-black uppercase">
+                  UNRECOVERABLE RUNAWAY
+                </span>
+              </div>
+              <div className="text-xs font-mono text-rose-200 mt-1">
+                {failureReason || `Remediation failed: Governing agent offline. Closed-loop control severed.`}
+              </div>
+              <div className="text-[10px] font-mono text-rose-300/80 mt-0.5">
+                {domainInfo.catastrophicMechanism}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                sound.playClick();
+                resetSim();
+              }}
+              className="px-3.5 py-2 rounded-xl bg-rose-900/80 hover:bg-rose-800 text-white border border-rose-400 font-mono text-xs font-bold transition-all cursor-pointer shadow-sm"
+            >
+              RESET SIMULATION
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Real-time Sandbox Controls Bar */}
       <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono shadow-xl">
         {/* Videogame Loading Bar: Fault Severity Vector */}
@@ -636,7 +967,9 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
         {/* Right Card: Faulted Twin + Agentic Remediation */}
         <div
           className={`bg-[#0f172a] border rounded-3xl flex flex-col overflow-hidden shadow-xl transition-all duration-300 ${
-            simStage === 'injected' || simStage === 'detected'
+            simStage === 'catastrophic_failure'
+              ? 'border-rose-600 shadow-[0_0_35px_rgba(244,63,94,0.4)] ring-2 ring-rose-500/50'
+              : simStage === 'injected' || simStage === 'detected'
               ? 'border-rose-500/70 shadow-[0_0_20px_rgba(244,63,94,0.15)]'
               : simStage === 'mitigating'
               ? 'border-amber-500/70 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
@@ -654,7 +987,9 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
             </div>
             <span
               className={`px-2.5 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase ${
-                simStage === 'injected' || simStage === 'detected'
+                simStage === 'catastrophic_failure'
+                  ? 'bg-rose-600 text-white font-black animate-pulse shadow-md'
+                  : simStage === 'injected' || simStage === 'detected'
                   ? 'bg-rose-500 text-white animate-pulse'
                   : simStage === 'mitigating'
                   ? 'bg-amber-400 text-black'
@@ -663,7 +998,11 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
                   : 'bg-[#05070a] text-slate-400 border border-[#1e293b]'
               }`}
             >
-              {simStage === 'idle' ? 'STANDBY' : simStage}
+              {simStage === 'idle'
+                ? 'STANDBY'
+                : simStage === 'catastrophic_failure'
+                ? 'CATASTROPHIC FAILURE'
+                : simStage}
             </span>
           </div>
 
@@ -688,9 +1027,17 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
             </div>
 
             <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[9px] font-mono text-slate-300 bg-[#05070a]/90 px-3 py-1.5 rounded-xl border border-[#1e293b] backdrop-blur-md">
-              <span className="text-cyan-400 font-bold">DELTA: {activePreset.deltaSummary}</span>
-              <span className="text-green-400 font-bold">
-                {simStage === 'remediated' ? '99.4% SAVED' : 'MONITORING'}
+              <span className={simStage === 'catastrophic_failure' ? 'text-rose-400 font-bold' : 'text-cyan-400 font-bold'}>
+                {simStage === 'catastrophic_failure'
+                  ? `FATAL: ${domainInfo.catastrophicMechanism}`
+                  : `DELTA: ${activePreset.deltaSummary}`}
+              </span>
+              <span className={simStage === 'catastrophic_failure' ? 'text-rose-500 font-black animate-pulse' : 'text-green-400 font-bold'}>
+                {simStage === 'catastrophic_failure'
+                  ? 'TERMINAL LOSS'
+                  : simStage === 'remediated'
+                  ? '99.4% SAVED'
+                  : 'MONITORING'}
               </span>
             </div>
           </div>
@@ -1140,7 +1487,7 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
                     : '';
 
                 let strokeColor = '#22d3ee';
-                if (autonomySetting === 'suppressed' && simTime > activePreset.detectionTime) {
+                if ((autonomySetting === 'suppressed' || isCatastrophic) && simTime > activePreset.detectionTime) {
                   strokeColor = '#f43f5e';
                 } else if (activePreset.id === 'collision') {
                   if (simTime < 1.6) strokeColor = '#22c55e';
@@ -1187,23 +1534,25 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
                 t: effectiveMitigationTime,
                 x: getXForTime(effectiveMitigationTime),
                 y: getYForTime(effectiveMitigationTime, false),
-                label:
-                  autonomySetting === 'suppressed'
-                    ? 'AUTONOMY OFF (NO MITIGATION)'
-                    : autonomySetting === 'hitl'
-                    ? `T+${effectiveMitigationTime.toFixed(1)}s HITL MITIGATE`
-                    : `T+${effectiveMitigationTime.toFixed(1)}s MITIGATION`,
-                color: autonomySetting === 'suppressed' ? '#f43f5e' : '#22c55e',
+                label: isCatastrophic
+                  ? `T+${effectiveMitigationTime.toFixed(1)}s MITIGATION FAILED (${isGoverningAgentOffline ? governingAgent?.name : 'QUORUM'} OFFLINE)`
+                  : autonomySetting === 'suppressed'
+                  ? 'AUTONOMY OFF (NO MITIGATION)'
+                  : autonomySetting === 'hitl'
+                  ? `T+${effectiveMitigationTime.toFixed(1)}s HITL MITIGATE`
+                  : `T+${effectiveMitigationTime.toFixed(1)}s MITIGATION`,
+                color: isCatastrophic || autonomySetting === 'suppressed' ? '#f43f5e' : '#22c55e',
               };
               const pRecover = {
                 t: effectiveRecoveryTime,
                 x: getXForTime(effectiveRecoveryTime),
                 y: getYForTime(effectiveRecoveryTime, false),
-                label:
-                  autonomySetting === 'suppressed'
-                    ? 'TERMINAL CATASTROPHE'
-                    : `T+${effectiveRecoveryTime.toFixed(1)}s NOMINAL ENVELOPE`,
-                color: autonomySetting === 'suppressed' ? '#f43f5e' : '#22c55e',
+                label: isCatastrophic
+                  ? `T+${effectiveRecoveryTime.toFixed(1)}s CATASTROPHIC FAILURE`
+                  : autonomySetting === 'suppressed'
+                  ? 'TERMINAL CATASTROPHE'
+                  : `T+${effectiveRecoveryTime.toFixed(1)}s NOMINAL ENVELOPE`,
+                color: isCatastrophic || autonomySetting === 'suppressed' ? '#f43f5e' : '#22c55e',
               };
 
               return [pInject, pDetect, pMitigate, pRecover].map((pt, idx) => {
@@ -1413,14 +1762,18 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
 
           <div
             className={`p-4 rounded-2xl border flex flex-col justify-between transition-all shadow-sm ${
-              simTime >= activePreset.detectionTime + 1.0
+              isFdirOffline
+                ? 'bg-[#05070a] border-rose-500/50 text-rose-300'
+                : simTime >= activePreset.detectionTime + 1.0
                 ? 'bg-[#05070a] border-green-400/60 text-white ring-1 ring-green-400/20'
                 : 'bg-[#05070a] border-[#1e293b] text-slate-400'
             }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-cyan-400 font-bold">02 // ISOLATION & RCA</span>
-              {simTime >= activePreset.detectionTime + 1.0 ? (
+              {isFdirOffline ? (
+                <span className="text-[9px] text-rose-400 font-bold">FDIR OFFLINE</span>
+              ) : simTime >= activePreset.detectionTime + 1.0 ? (
                 <CheckCircle2 size={14} className="text-green-400" />
               ) : (
                 <span className="text-[9px] text-slate-400">
@@ -1428,15 +1781,21 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
                 </span>
               )}
             </div>
-            <div className="text-xs font-semibold my-1 text-slate-100">Bayesian Root Cause</div>
+            <div className="text-xs font-semibold my-1 text-slate-100">
+              {isFdirOffline ? 'FDIR Supervisor Isolated' : 'Bayesian Root Cause'}
+            </div>
             <div className="text-[9px] text-slate-400">
-              Agent-Delta FDIR isolated {activePreset.subsystem.toLowerCase()} fault via telemetry correlation.
+              {isFdirOffline
+                ? 'Agent-Delta offline: telemetry correlation & fault matrix unavailable.'
+                : `Agent-Delta FDIR isolated ${activePreset.subsystem.toLowerCase()} fault via telemetry correlation.`}
             </div>
           </div>
 
           <div
             className={`p-4 rounded-2xl border flex flex-col justify-between transition-all shadow-sm ${
-              autonomySetting === 'suppressed'
+              isCatastrophic
+                ? 'bg-[#05070a] border-rose-500/50 text-rose-300'
+                : autonomySetting === 'suppressed'
                 ? 'bg-[#05070a] border-rose-500/50 text-rose-300'
                 : simTime >= effectiveMitigationTime
                 ? 'bg-[#05070a] border-green-400/60 text-white ring-1 ring-green-400/20'
@@ -1445,7 +1804,9 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
           >
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-cyan-400 font-bold">03 // SWARM CONSENSUS</span>
-              {autonomySetting === 'suppressed' ? (
+              {isCatastrophic ? (
+                <span className="text-[9px] text-rose-400 font-bold">SEVERED (OFFLINE)</span>
+              ) : autonomySetting === 'suppressed' ? (
                 <span className="text-[9px] text-rose-400 font-bold">SUPPRESSED</span>
               ) : simTime >= effectiveMitigationTime ? (
                 <CheckCircle2 size={14} className="text-green-400" />
@@ -1454,14 +1815,20 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
               )}
             </div>
             <div className="text-xs font-semibold my-1 text-slate-100">
-              {autonomySetting === 'suppressed'
+              {isCatastrophic
+                ? isGoverningAgentOffline
+                  ? `Governor [${governingAgent?.name}] Offline`
+                  : 'FDIR Supervisor Offline'
+                : autonomySetting === 'suppressed'
                 ? 'Autonomous Mitigation Disabled'
                 : autonomySetting === 'hitl'
                 ? 'HITL Gate Approved'
                 : 'Raft-BFT 4/4 Quorum'}
             </div>
             <div className="text-[9px] text-slate-400">
-              {autonomySetting === 'suppressed'
+              {isCatastrophic
+                ? 'Autonomous actuation uncommanded: responsible agent node is isolated from mesh.'
+                : autonomySetting === 'suppressed'
                 ? 'Open-loop mode: no mitigation commands dispatched.'
                 : 'Mesh signed remediation plan without ground station uplink.'}
             </div>
@@ -1469,7 +1836,7 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
 
           <div
             className={`p-4 rounded-2xl border flex flex-col justify-between transition-all shadow-sm ${
-              autonomySetting === 'suppressed' && simTime >= activePreset.detectionTime
+              (isCatastrophic || autonomySetting === 'suppressed') && simTime >= activePreset.detectionTime
                 ? 'bg-[#05070a] border-rose-500/50 text-rose-400'
                 : simTime >= effectiveRecoveryTime
                 ? 'bg-[#05070a] border-green-400/60 text-white ring-1 ring-green-400/20'
@@ -1478,8 +1845,8 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
           >
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-cyan-400 font-bold">04 // VERIFY & RESTORE</span>
-              {autonomySetting === 'suppressed' && simTime >= activePreset.detectionTime ? (
-                <span className="text-[9px] text-rose-400 font-bold">FAILURE</span>
+              {(isCatastrophic || autonomySetting === 'suppressed') && simTime >= activePreset.detectionTime ? (
+                <span className="text-[9px] text-rose-400 font-bold animate-pulse">FAILURE</span>
               ) : simTime >= effectiveRecoveryTime ? (
                 <CheckCircle2 size={14} className="text-green-400" />
               ) : (
@@ -1487,13 +1854,13 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
               )}
             </div>
             <div className="text-xs font-semibold my-1 text-slate-100">
-              {autonomySetting === 'suppressed' && simTime >= activePreset.detectionTime
+              {(isCatastrophic || autonomySetting === 'suppressed') && simTime >= activePreset.detectionTime
                 ? 'Catastrophic Runaway'
                 : 'Flight Envelope Nominal'}
             </div>
             <div className="text-[9px] text-slate-400">
-              {autonomySetting === 'suppressed' && simTime >= activePreset.detectionTime
-                ? 'Hardware damage limit breached. Safe recovery impossible.'
+              {(isCatastrophic || autonomySetting === 'suppressed') && simTime >= activePreset.detectionTime
+                ? `${domainInfo.catastrophicMechanism}`
                 : 'Secondary cooling engaged, attitude stabilized, thermal drift arrested.'}
             </div>
           </div>

@@ -106,6 +106,8 @@ export default function App() {
                 selectedPresetId={selectedPresetId}
                 onPresetChange={(id) => setSelectedPresetId(id)}
                 onUpdateAlertCount={(crit, warn) => setAgentAlertCount({ crit, warn })}
+                agents={agents}
+                onToggleAgentIsolation={handleToggleAgentIsolation}
               />
             )}
 
