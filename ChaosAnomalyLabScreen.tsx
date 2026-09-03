@@ -1,0 +1,1631 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { AnomalyPreset, CoTLogEntry } from '../types';
+import { ANOMALY_PRESETS } from '../data/mockFlightData';
+import { sound } from '../utils/audio';
+import {
+  Play,
+  RotateCcw,
+  AlertTriangle,
+  CheckCircle2,
+  Cpu,
+  Flame,
+  Gauge,
+  Send,
+  Zap,
+  FastForward,
+} from 'lucide-react';
+
+interface ChaosAnomalyLabScreenProps {
+  selectedPresetId?: string;
+  onPresetChange?: (presetId: string) => void;
+  onUpdateAlertCount?: (crit: number, warn: number) => void;
+}
+
+export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
+  selectedPresetId = 'thermal',
+  onPresetChange,
+  onUpdateAlertCount,
+}) => {
+  // Active selected preset
+  const [activePreset, setActivePreset] = useState<AnomalyPreset>(
+    ANOMALY_PRESETS.find((p) => p.id === selectedPresetId) || ANOMALY_PRESETS[0]
+  );
+
+  // Sandbox adjustable variables
+  const [severityLevel, setSeverityLevel] = useState<number>(activePreset.severityDefault);
+  const [noiseLevel, setNoiseLevel] = useState<number>(25); // 0 to 100%
+  const [autonomySetting, setAutonomySetting] = useState<'closed-loop' | 'hitl' | 'suppressed'>('closed-loop');
+  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 5>(1);
+
+  // Simulation execution state
+  const [simRunning, setSimRunning] = useState<boolean>(false);
+  const [simTime, setSimTime] = useState<number>(0); // 0 to 15 seconds
+  const [simStage, setSimStage] = useState<'idle' | 'injected' | 'detected' | 'mitigating' | 'remediated'>('idle');
+
+  // Stable refs to prevent tearing and avoid setState calls inside functional updaters
+  const simTimeRef = useRef<number>(0);
+  const simStageRef = useRef<'idle' | 'injected' | 'detected' | 'mitigating' | 'remediated'>('idle');
+  const simRunningRef = useRef<boolean>(false);
+  const initialMountRef = useRef<boolean>(true);
+
+  // Streaming journal logs
+  const [journalLogs, setJournalLogs] = useState<CoTLogEntry[]>([]);
+  const [customOverrideInput, setCustomOverrideInput] = useState<string>('');
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const journalContainerRef = useRef<HTMLDivElement>(null);
+
+  // Effective timings considering Autonomy Mode
+  const effectiveMitigationTime =
+    autonomySetting === 'hitl'
+      ? activePreset.mitigationTime + 2.2
+      : activePreset.mitigationTime;
+  const effectiveRecoveryTime =
+    autonomySetting === 'hitl'
+      ? activePreset.recoveryTime + 2.8
+      : activePreset.recoveryTime;
+
+  // Reset simulation to clean baseline
+  const resetSim = () => {
+    simRunningRef.current = false;
+    simTimeRef.current = 0;
+    simStageRef.current = 'idle';
+    setSimRunning(false);
+    setSimTime(0);
+    setSimStage('idle');
+    setJournalLogs([]);
+    if (onUpdateAlertCount) {
+      setTimeout(() => onUpdateAlertCount(0, 0), 0);
+    }
+  };
+
+  // When selectedPresetId prop changes from outside
+  useEffect(() => {
+    if (initialMountRef.current) {
+      initialMountRef.current = false;
+      return;
+    }
+    const found = ANOMALY_PRESETS.find((p) => p.id === selectedPresetId);
+    if (found && found.id !== activePreset.id) {
+      setActivePreset(found);
+      setSeverityLevel(found.severityDefault);
+      resetSim();
+    }
+  }, [selectedPresetId, activePreset.id]);
+
+  // Run Test Harness / Inject Anomaly
+  const handleStartSim = () => {
+    sound.playWarning();
+    resetSim();
+    simRunningRef.current = true;
+    simTimeRef.current = 0;
+    simStageRef.current = 'injected';
+    setSimRunning(true);
+    setSimStage('injected');
+
+    if (onUpdateAlertCount) {
+      const crit = severityLevel >= 3 ? 1 : 0;
+      const warn = severityLevel <= 2 ? 1 : 0;
+      setTimeout(() => onUpdateAlertCount(crit, warn), 0);
+    }
+
+    // Add initial injection log
+    const initialEntry: CoTLogEntry = {
+      id: `log-${Date.now()}-0`,
+      timestamp: '+00:00.00',
+      agent: 'CHAOS_ENGINE',
+      tag: 'FAULT_INJECT',
+      tagColor: 'bg-tertiary/20 text-tertiary',
+      message: `[INJECTION EVENT] ${activePreset.title} injected at severity Level ${severityLevel} (${Math.round(
+        (severityLevel / 4) * 100
+      )}%). Target: ${activePreset.telemetryChannel}. Autonomy: ${autonomySetting.toUpperCase()}.`,
+    };
+    setJournalLogs([initialEntry]);
+  };
+
+  // Real-time simulation timer loop
+  useEffect(() => {
+    if (!simRunning) return;
+
+    const intervalMs = 100 / playbackSpeed;
+    const timer = setInterval(() => {
+      const nextTime = Math.round((simTimeRef.current + 0.1) * 10) / 10;
+      simTimeRef.current = nextTime;
+      setSimTime(nextTime);
+
+      const curStage = simStageRef.current;
+
+      // Stage transitions based on autonomy setting & preset timings
+      if (autonomySetting === 'suppressed') {
+        // Autonomy is disabled / open-loop - system will NOT mitigate or remediate
+        if (nextTime >= activePreset.detectionTime && curStage === 'injected') {
+          simStageRef.current = 'detected';
+          setSimStage('detected');
+          sound.playWarning();
+          if (onUpdateAlertCount) {
+            setTimeout(() => onUpdateAlertCount(1, 0), 0);
+          }
+        }
+      } else {
+        if (nextTime >= effectiveRecoveryTime && curStage !== 'remediated') {
+          simStageRef.current = 'remediated';
+          setSimStage('remediated');
+          sound.playRemediated();
+          if (onUpdateAlertCount) {
+            setTimeout(() => onUpdateAlertCount(0, 0), 0);
+          }
+        } else if (
+          nextTime >= effectiveMitigationTime &&
+          curStage !== 'mitigating' &&
+          curStage !== 'remediated'
+        ) {
+          simStageRef.current = 'mitigating';
+          setSimStage('mitigating');
+          sound.playThruster();
+        } else if (nextTime >= activePreset.detectionTime && curStage === 'injected') {
+          simStageRef.current = 'detected';
+          setSimStage('detected');
+          sound.playWarning();
+        }
+      }
+
+      // Add corresponding logs as time passes
+      const matchingLog = activePreset.journalLogs.find((log) => {
+        const logSec = parseFloat(log.time.replace('+', '').replace('00:', ''));
+        return Math.abs(logSec - nextTime) < 0.08;
+      });
+
+      if (matchingLog) {
+        // If autonomy is suppressed, filter out consensus and dispatch logs
+        if (
+          autonomySetting === 'suppressed' &&
+          (matchingLog.tag === 'CONSENSUS' ||
+            matchingLog.tag === 'DISPATCH' ||
+            matchingLog.tag === 'REMEDIATED')
+        ) {
+          // Skip automated mitigation logs
+        } else {
+          setJournalLogs((current) => {
+            if (current.some((e) => e.message === matchingLog.message)) return current;
+            return [
+              ...current,
+              {
+                id: `log-${Date.now()}-${Math.random()}`,
+                timestamp: `+00:${String(Math.floor(nextTime)).padStart(2, '0')}.${String(
+                  Math.floor((nextTime % 1) * 100)
+                ).padStart(2, '0')}`,
+                agent: matchingLog.agent,
+                tag: matchingLog.tag,
+                tagColor: matchingLog.tagColor,
+                message: matchingLog.message,
+              },
+            ];
+          });
+        }
+      }
+
+      if (nextTime >= 15.0) {
+        simRunningRef.current = false;
+        setSimRunning(false);
+      }
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [
+    simRunning,
+    activePreset,
+    playbackSpeed,
+    onUpdateAlertCount,
+    severityLevel,
+    autonomySetting,
+    effectiveMitigationTime,
+    effectiveRecoveryTime,
+  ]);
+
+  // Auto-scroll journal logs
+  useEffect(() => {
+    if (journalContainerRef.current) {
+      journalContainerRef.current.scrollTop = journalContainerRef.current.scrollHeight;
+    }
+  }, [journalLogs]);
+
+  // Handle custom user synthetic parameter injection
+  const handleTransmitOverride = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customOverrideInput.trim()) return;
+
+    sound.playClick();
+    const newEntry: CoTLogEntry = {
+      id: `log-custom-${Date.now()}`,
+      timestamp: `+00:${String(Math.floor(simTime)).padStart(2, '0')}.${String(
+        Math.floor((simTime % 1) * 100)
+      ).padStart(2, '0')}`,
+      agent: 'FLIGHT_DIRECTOR_KEY',
+      tag: 'SYNTHETIC_OVERRIDE',
+      tagColor: 'bg-primary text-on-primary',
+      message: `>> UPLINK INJECTED: "${customOverrideInput.trim()}" -- Commanded to swarm bus.`,
+    };
+
+    setJournalLogs((prev) => [...prev, newEntry]);
+    setCustomOverrideInput('');
+  };
+
+  // Math models for graph coordinates
+  const getXForTime = (t: number) => {
+    return 60 + (Math.max(0, Math.min(15, t)) / 15.0) * 700;
+  };
+
+  const getYForTime = (t: number, isUncorrected = false) => {
+    // High frequency noise jitter scaling with noiseLevel (0..100)
+    const noiseScale = (noiseLevel / 100) * 6.0;
+    const jitter =
+      t > 0
+        ? (Math.sin(t * 22.3 + 0.5) * 0.6 + Math.cos(t * 43.1 + 1.2) * 0.4) * noiseScale
+        : 0;
+
+    // Dedicated altitude trajectory modeling for space object collision
+    if (activePreset.id === 'collision') {
+      const nominalAltY = 60; // Nominal circular orbit 541.80 km mapped to Y=60
+      // Scaled altitude drop depth in SVG pixels based on severity level (45px = -3.8km to 105px = -11.8km)
+      const impactDrop = 45 + (severityLevel - 1) * 20;
+
+      // Prior to collision at T=1.6s, satellite stays in nominal circular orbit
+      if (t < 1.6) {
+        return nominalAltY + jitter * 0.2;
+      }
+
+      const timeSinceImpact = t - 1.6;
+
+      // Uncorrected / Suppressed Autonomy: unmitigated atmospheric re-entry decay
+      if (isUncorrected || autonomySetting === 'suppressed') {
+        const dropProgress = Math.min(1.0, timeSinceImpact / 0.4);
+        const continuousDecay = (timeSinceImpact / 13.4) * 35;
+        return nominalAltY + impactDrop * dropProgress + continuousDecay + jitter;
+      }
+
+      // Closed-loop or HITL autonomous trajectory correction:
+      if (t <= effectiveMitigationTime) {
+        // Phase 1: Steep kinetic impulse drop following impact, then tumbling drift prior to mitigation
+        const dropProgress = Math.min(1.0, timeSinceImpact / 0.4);
+        return nominalAltY + impactDrop * dropProgress + jitter * 0.6;
+      } else if (t <= effectiveRecoveryTime) {
+        // Phase 2: Corrective thruster burn (+ΔV prograde) lifting altitude back to 541.8 km
+        const burnDuration = effectiveRecoveryTime - effectiveMitigationTime;
+        const burnProgress = (t - effectiveMitigationTime) / burnDuration;
+        const burnCurve = Math.sin(burnProgress * Math.PI * 0.5);
+        const remainingDeficit = impactDrop * (1.0 - burnCurve);
+        return nominalAltY + remainingDeficit + jitter * 0.4;
+      } else {
+        // Phase 3: Orbit restored & circularized
+        return nominalAltY + Math.sin(t * 2.0) * 0.8 + jitter * 0.15;
+      }
+    }
+
+    const baselineY = 150;
+    const sFactor = severityLevel / 4;
+    // Scale maximum deflection with severityLevel (1..4)
+    const maxDeflection = 60 * sFactor + (severityLevel === 4 ? 35 : 0);
+
+    if (isUncorrected || autonomySetting === 'suppressed') {
+      if (t <= 0) return baselineY;
+      const progress = Math.min(1.0, t / 10.0);
+      const unmitigated = Math.min(140, maxDeflection * 1.45 * Math.pow(progress, 1.25));
+      return Math.max(12, baselineY - unmitigated + jitter);
+    }
+
+    // Closed-loop / HITL curve
+    if (t <= 0) return baselineY;
+
+    if (t <= effectiveMitigationTime) {
+      const p = t / effectiveMitigationTime;
+      const def = maxDeflection * Math.sin(p * Math.PI * 0.5);
+      return Math.max(15, baselineY - def + jitter);
+    } else if (t <= effectiveRecoveryTime) {
+      const p = (t - effectiveMitigationTime) / (effectiveRecoveryTime - effectiveMitigationTime);
+      const damp = Math.cos(p * Math.PI * 0.5);
+      const settle = Math.sin(p * Math.PI * 2) * 3.5 * (1 - p);
+      return baselineY - maxDeflection * damp + settle + jitter;
+    } else {
+      return baselineY - 1.5 + Math.sin(t * 2.5) * 1.0 + jitter * 0.3;
+    }
+  };
+
+  // Formatted metric value for current trajectory position
+  const getFormattedMetric = (t: number) => {
+    if (t <= 0) return activePreset.baselineMetric;
+
+    if (activePreset.id === 'collision') {
+      if (t < 1.6) {
+        return '541.80 km (Nominal Orbit)';
+      }
+      const currentY = getYForTime(t, false);
+      const dropPx = Math.max(0, currentY - 60);
+      const dropKm = (dropPx * 0.0894).toFixed(2);
+      const currentAlt = (541.80 - parseFloat(dropKm)).toFixed(2);
+
+      if (autonomySetting === 'suppressed' && t > 1.6) {
+        return `${currentAlt} km (-${dropKm} km runaway decay)`;
+      }
+      if (t < effectiveMitigationTime) {
+        return `${currentAlt} km (-${dropKm} km drop)`;
+      } else if (t < effectiveRecoveryTime) {
+        return `${currentAlt} km (+ΔV burn recovering)`;
+      } else {
+        return `${currentAlt} km (Orbit circularized)`;
+      }
+    }
+
+    const currentY = getYForTime(t, false);
+    const deflection = Math.max(0, 150 - currentY);
+    const maxPossible = 95;
+    const norm = Math.min(1.0, deflection / maxPossible);
+
+    if (activePreset.id === 'thermal') {
+      const base = 21.2;
+      const peak = base + (48.9 - base) * (severityLevel / 3) * norm;
+      return `${peak.toFixed(1)} °C`;
+    }
+    if (activePreset.id === 'adcs') {
+      const peak = 14.2 * (severityLevel / 2) * norm;
+      return `+${peak.toFixed(2)}°/s drift`;
+    }
+    if (activePreset.id === 'drag') {
+      const lossM = Math.round(128 * (severityLevel / 3) * norm);
+      const altKm = (541.8 - lossM / 1000).toFixed(2);
+      return `${altKm} km (-${lossM}m)`;
+    }
+    if (activePreset.id === 'thruster') {
+      const thrust = (3.8 * (severityLevel / 4) * norm).toFixed(1);
+      return `+${thrust} N continuous`;
+    }
+    if (activePreset.id === 'sada') {
+      const lossW = Math.round(930 * (severityLevel / 2) * norm);
+      return `${2420 - lossW} W`;
+    }
+    return activePreset.faultMetric;
+  };
+
+  // Live telemetry metrics calculation
+  const liveValueText = simTime === 0 ? activePreset.baselineMetric : getFormattedMetric(simTime);
+  const currentProbeY = getYForTime(simTime, false);
+
+  let liveStatusColor = 'text-green-400 font-bold';
+  let dynamicAuraIntensity = 0;
+
+  if (autonomySetting === 'suppressed' && simTime > activePreset.detectionTime) {
+    liveStatusColor = 'text-rose-500 font-bold animate-pulse';
+    dynamicAuraIntensity = 0.6;
+  } else if (simStage === 'injected' || simStage === 'detected') {
+    liveStatusColor = 'text-rose-400 font-bold animate-pulse';
+    dynamicAuraIntensity = severityLevel * 0.22;
+  } else if (simStage === 'mitigating') {
+    liveStatusColor = 'text-amber-400 font-bold';
+    dynamicAuraIntensity = 0.25;
+  } else if (simStage === 'remediated') {
+    liveStatusColor = 'text-green-400 font-bold';
+    dynamicAuraIntensity = 0;
+  }
+
+  return (
+    <div className="w-full flex flex-col gap-4">
+      {/* Top Sandbox Control Ribbon - Bento Ribbon */}
+      <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-sm">
+            <AlertTriangle size={20} />
+          </div>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-white font-semibold uppercase tracking-wide">
+                CHAOS & ANOMALY INJECTION SANDBOX
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[9px] bg-green-500/10 text-green-400 font-mono font-bold border border-green-500/30">
+                HIL BUS 100Hz RT-SYNC
+              </span>
+            </div>
+            <span className="font-mono text-[11px] text-slate-400">
+              REAL-TIME TRAJECTORY DIVERGENCE & CLOSED-LOOP HEALING BENCHMARK
+            </span>
+          </div>
+        </div>
+
+        {/* Real-time simulation clock & Execution Actions */}
+        <div className="flex items-center flex-wrap gap-3">
+          <div className="px-3.5 py-2 rounded-xl bg-[#05070a] border border-[#1e293b] font-mono text-xs flex items-center gap-2 shadow-xs">
+            <span className="text-slate-400 text-[10px]">SIM TIME:</span>
+            <span
+              className={`font-bold tracking-wider ${
+                simRunning ? 'text-cyan-400 animate-pulse' : 'text-slate-200'
+              }`}
+            >
+              T+{String(Math.floor(simTime)).padStart(2, '0')}:
+              {String(Math.floor((simTime % 1) * 100)).padStart(2, '0')}s
+            </span>
+          </div>
+
+          {/* Speed Buttons */}
+          <div className="flex items-center bg-[#05070a] p-1 rounded-xl border border-[#1e293b] text-[10px] font-mono">
+            {([1, 2, 5] as const).map((spd) => (
+              <button
+                key={spd}
+                onClick={() => setPlaybackSpeed(spd)}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  playbackSpeed === spd
+                    ? 'bg-cyan-500 text-black font-bold shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {spd}X
+              </button>
+            ))}
+          </div>
+
+          {/* Reset button */}
+          <button
+            onClick={() => {
+              sound.playClick();
+              resetSim();
+            }}
+            className="px-3.5 py-2 rounded-xl bg-[#05070a] border border-[#1e293b] hover:border-slate-400 text-slate-300 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+          >
+            <RotateCcw size={13} />
+            RESET
+          </button>
+
+          {/* Run / Inject button */}
+          <button
+            onClick={handleStartSim}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition-all shadow-md cursor-pointer ${
+              simRunning
+                ? 'bg-rose-500 text-white animate-pulse'
+                : 'bg-amber-400 text-black hover:bg-amber-300'
+            }`}
+          >
+            <Play size={13} fill="currentColor" />
+            {simRunning ? 'TEST RUNNING...' : 'RUN TEST HARNESS'}
+          </button>
+        </div>
+      </div>
+
+      {/* Preset Selector Strip - Bento Panel */}
+      <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl flex flex-col gap-3 shadow-xl">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-mono">
+            PRE-CONFIGURED ANOMALY VECTORS (CLICK TO LOAD)
+          </span>
+          <span className="text-[10px] font-mono text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30">
+            ACTIVE PRESET: {activePreset.title}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          {ANOMALY_PRESETS.map((preset) => {
+            const isSelected = activePreset.id === preset.id;
+            return (
+              <button
+                key={preset.id}
+                onClick={() => {
+                  sound.playClick();
+                  setActivePreset(preset);
+                  setSeverityLevel(preset.severityDefault);
+                  resetSim();
+                  if (onPresetChange) onPresetChange(preset.id);
+                }}
+                className={`p-3.5 text-left rounded-2xl border transition-all cursor-pointer flex flex-col justify-between shadow-sm ${
+                  isSelected
+                    ? 'bg-[#05070a] border-amber-400/80 text-white ring-1 ring-amber-400/40'
+                    : 'bg-[#05070a] border-[#1e293b] text-slate-400 hover:border-cyan-500/40 hover:text-white'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`text-[9px] font-mono font-bold ${
+                        isSelected ? 'text-amber-400' : 'text-cyan-400'
+                      }`}
+                    >
+                      {preset.presetNum}
+                    </span>
+                    <span className="text-[8px] font-mono text-slate-400">
+                      {preset.recoveryTime}s
+                    </span>
+                  </div>
+                  <div className="text-xs font-semibold mt-1 text-slate-100 truncate">
+                    {preset.title}
+                  </div>
+                </div>
+                <div className="text-[9px] text-slate-400 mt-1.5 line-clamp-1">
+                  {preset.description}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Real-time Sandbox Controls Bar: Fault Severity, Gaussian Noise, Autonomy Mode - Bento Panel */}
+      <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono shadow-xl">
+        {/* Fault Severity Slider */}
+        <div className="bg-[#05070a] p-4 rounded-2xl border border-[#1e293b] flex flex-col gap-1.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 flex items-center gap-1.5">
+              <Flame size={13} className="text-amber-400" />
+              FAULT SEVERITY VECTOR:
+            </span>
+            <span className="text-amber-400 font-bold">
+              LVL {severityLevel} // {severityLevel === 1 ? '25% MILD' : severityLevel === 2 ? '50% MOD' : severityLevel === 3 ? '78% CRIT' : '100% CATASTROPHIC'}
+            </span>
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="4"
+            step="1"
+            value={severityLevel}
+            onChange={(e) => {
+              sound.playClick();
+              setSeverityLevel(parseInt(e.target.value));
+            }}
+            className="w-full accent-amber-400 cursor-pointer"
+          />
+          <div className="flex justify-between text-[8px] text-slate-400 font-mono">
+            <span>L1 (Mild)</span>
+            <span>L2 (Mod)</span>
+            <span>L3 (Crit)</span>
+            <span>L4 (Catastrophic)</span>
+          </div>
+        </div>
+
+        {/* Telemetry Gaussian Noise */}
+        <div className="bg-[#05070a] p-4 rounded-2xl border border-[#1e293b] flex flex-col gap-1.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 flex items-center gap-1.5">
+              <Gauge size={13} className="text-cyan-400" />
+              TELEMETRY GAUSSIAN NOISE:
+            </span>
+            <span className="text-cyan-400 font-bold">{noiseLevel}% JITTER</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={noiseLevel}
+            onChange={(e) => setNoiseLevel(parseInt(e.target.value))}
+            className="w-full accent-cyan-400 cursor-pointer"
+          />
+          <div className="flex justify-between text-[8px] text-slate-400 font-mono">
+            <span>0% Clean HIL</span>
+            <span>50% Orbital Jitter</span>
+            <span>100% Ionospheric Storm</span>
+          </div>
+        </div>
+
+        {/* Swarm Autonomy Mode */}
+        <div className="bg-[#05070a] p-4 rounded-2xl border border-[#1e293b] flex flex-col gap-1.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 flex items-center gap-1.5">
+              <Cpu size={13} className="text-green-400" />
+              SWARM AUTONOMY MODE:
+            </span>
+            <span className="text-green-400 font-bold uppercase">{autonomySetting}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5 mt-1">
+            {(
+              [
+                { id: 'closed-loop', label: 'CLOSED-LOOP' },
+                { id: 'hitl', label: 'HITL (GATE)' },
+                { id: 'suppressed', label: 'SUPPRESSED' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => {
+                  sound.playClick();
+                  setAutonomySetting(opt.id);
+                }}
+                className={`py-1.5 text-[9px] rounded-lg border transition-all cursor-pointer text-center ${
+                  autonomySetting === opt.id
+                    ? 'bg-green-500 text-black font-bold border-green-400 shadow-xs'
+                    : 'bg-[#0f172a] text-slate-400 border-[#1e293b] hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Pictorial Digital Twin Comparison Cards: Nominal Baseline vs Faulted/Remediated Twin - Bento Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Left Card: Nominal Baseline Twin */}
+        <div className="bg-[#0f172a] border border-[#1e293b] rounded-3xl flex flex-col overflow-hidden shadow-xl hover:border-cyan-500/30 transition-all">
+          <div className="p-4 border-b border-[#1e293b] flex items-center justify-between bg-[#0a1120]/80">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-green-400 font-bold">TWIN-01 //</span>
+              <span className="text-xs uppercase text-slate-200 font-semibold tracking-wide">
+                Nominal Baseline Twin (Ground Control Model)
+              </span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-mono bg-green-500/10 text-green-400 font-bold border border-green-500/30">
+              STEADY STATE
+            </span>
+          </div>
+
+          <div className="relative h-56 bg-[#05070a] flex items-center justify-center p-4 overflow-hidden">
+            <img
+              alt="Nominal Baseline Satellite Digital Twin"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1K1ZORzgCUlP1o7plb0vvUaudvSTxP86HqflkAPu-bclU5EuFK2r77pZ8K7zvmcFzuEmCyKpiboQ-F_8UUftic89z7ECR8Lgs3EMRWo2Fhj7fArd1WMsOJgAUAqaTDOX7esGocOdDuKZ2SLQW_FodnWhMusxB7FuTdk0EPGWoy4S783o-HtuoELTMIkvKoNyuOEdGZhALOG5GIODWPUaASUDS47OvV-o9N22twCE256-bEeroXI0r"
+              className="max-h-full max-w-full object-contain filter drop-shadow-[0_0_12px_rgba(76,215,246,0.2)]"
+            />
+            <div className="absolute top-3 left-3 bg-[#05070a]/90 px-2.5 py-1 rounded-xl border border-[#1e293b] text-[9px] font-mono text-slate-300 backdrop-blur-md">
+              PARAM: <span className="text-green-400 font-bold">{activePreset.baselineMetric}</span>
+            </div>
+            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[9px] font-mono text-slate-300 bg-[#05070a]/90 px-3 py-1.5 rounded-xl border border-[#1e293b] backdrop-blur-md">
+              <span>ATTITUDE: 0.00° ERROR</span>
+              <span>ORBIT: 541.80 KM</span>
+              <span className="text-green-400">POWER: 2,420W</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Card: Faulted Twin + Agentic Remediation */}
+        <div
+          className={`bg-[#0f172a] border rounded-3xl flex flex-col overflow-hidden shadow-xl transition-all duration-300 ${
+            simStage === 'injected' || simStage === 'detected'
+              ? 'border-rose-500/70 shadow-[0_0_20px_rgba(244,63,94,0.15)]'
+              : simStage === 'mitigating'
+              ? 'border-amber-500/70 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
+              : simStage === 'remediated'
+              ? 'border-green-500/70 shadow-[0_0_20px_rgba(34,197,94,0.15)]'
+              : 'border-[#1e293b]'
+          }`}
+        >
+          <div className="p-4 border-b border-[#1e293b] flex items-center justify-between bg-[#0a1120]/80">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-cyan-400 font-bold">TWIN-02 //</span>
+              <span className="text-xs uppercase text-slate-200 font-semibold tracking-wide">
+                Faulted Twin + Agentic Remediation
+              </span>
+            </div>
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase ${
+                simStage === 'injected' || simStage === 'detected'
+                  ? 'bg-rose-500 text-white animate-pulse'
+                  : simStage === 'mitigating'
+                  ? 'bg-amber-400 text-black'
+                  : simStage === 'remediated'
+                  ? 'bg-green-500 text-black'
+                  : 'bg-[#05070a] text-slate-400 border border-[#1e293b]'
+              }`}
+            >
+              {simStage === 'idle' ? 'STANDBY' : simStage}
+            </span>
+          </div>
+
+          <div className="relative h-56 bg-[#05070a] flex items-center justify-center p-4 overflow-hidden">
+            {/* Dynamic visual aura representing thermal/fault state */}
+            {dynamicAuraIntensity > 0 && (
+              <div
+                className="absolute inset-0 pointer-events-none transition-opacity duration-300 animate-pulse"
+                style={{
+                  background: `radial-gradient(circle, rgba(244,63,94,${dynamicAuraIntensity}) 0%, transparent 70%)`,
+                }}
+              />
+            )}
+
+            <img
+              alt="Faulted and Remediated Satellite Digital Twin"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXkExvaR1cCrmB4uW3rYbUpq3usxMB-zyjqlgeAKCcr2yP9T5Jf_iWQdOjHyEb_Q8c3aX4yAtk1coZHAazVnSB31AEuFKpsB--K9vEchb2IQ3ycLzEFlUNB_6YtYIGn95J1kRzU8aiaaAzi47Usc3MF5Ydo70yUnjHNIpcKa__IaHOwBVML-xYc3-V5ipnjTF5XKEjqA0WFZKS7ki0F0ql60NOHFhCL_1r9Q_cXhdRwmZlhe57siLq"
+              className="max-h-full max-w-full object-contain filter drop-shadow-[0_0_12px_rgba(255,185,95,0.25)]"
+            />
+
+            <div className="absolute top-3 left-3 bg-[#05070a]/90 px-2.5 py-1 rounded-xl border border-[#1e293b] text-[9px] font-mono backdrop-blur-md">
+              LIVE SENSOR: <span className={liveStatusColor}>{liveValueText}</span>
+            </div>
+
+            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[9px] font-mono text-slate-300 bg-[#05070a]/90 px-3 py-1.5 rounded-xl border border-[#1e293b] backdrop-blur-md">
+              <span className="text-cyan-400 font-bold">DELTA: {activePreset.deltaSummary}</span>
+              <span className="text-green-400 font-bold">
+                {simStage === 'remediated' ? '99.4% SAVED' : 'MONITORING'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Real-time Graphical Trajectory & Telemetry Divergence Chart - Bento Panel */}
+      <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl flex flex-col gap-4 shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1e293b]/60 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs font-bold text-cyan-400">GRAPH-01 //</span>
+            <span className="text-xs uppercase text-slate-200 font-semibold tracking-wide">
+              Real-Time Dynamic Trajectory & Fault Remediation Vector
+            </span>
+          </div>
+
+          <div className="flex items-center flex-wrap gap-4 text-[10px] font-mono">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-0.5 bg-green-400 inline-block rounded-full"></span>
+              <span className="text-slate-400">Nominal Baseline ({activePreset.baselineMetric})</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-0.5 bg-rose-400 border-b border-dashed border-rose-400 inline-block"></span>
+              <span className="text-rose-400">Catastrophic Uncorrected</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-0.5 bg-cyan-400 inline-block rounded-full"></span>
+              <span className="text-cyan-400 font-bold">
+                {autonomySetting === 'suppressed' ? 'Unmitigated Open-Loop' : 'Closed-Loop Remediated'}
+              </span>
+            </div>
+            <div className="px-2 py-0.5 rounded-lg bg-[#05070a] border border-[#1e293b] text-slate-300 font-bold">
+              LIVE: <span className={liveStatusColor}>{liveValueText}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic SVG Interactive Chart */}
+        <div className="relative h-68 w-full bg-[#05070a] rounded-2xl border border-[#1e293b] p-2 overflow-hidden select-none shadow-inner">
+          {/* Background Grid */}
+          <div
+            className="absolute inset-0 opacity-10 pointer-events-none"
+            style={{
+              backgroundImage:
+                'linear-gradient(to right, #22d3ee 1px, transparent 1px), linear-gradient(to bottom, #22d3ee 1px, transparent 1px)',
+              backgroundSize: '40px 30px',
+            }}
+          />
+
+          {/* Prompt when idle at T=0 */}
+          {simTime === 0 && !simRunning && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+              <div className="bg-[#0f172a]/80 backdrop-blur-md px-4 py-2 rounded-xl border border-cyan-500/30 text-xs font-mono text-cyan-300 shadow-xl flex items-center gap-2">
+                <Play size={12} className="text-amber-400" />
+                <span>CLICK <strong>"RUN TEST HARNESS"</strong> TO STREAM LIVE ERROR TRAJECTORY</span>
+              </div>
+            </div>
+          )}
+
+          <svg
+            className="w-full h-full overflow-visible cursor-crosshair"
+            viewBox="0 0 800 200"
+            preserveAspectRatio="none"
+            onMouseMove={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clientX = e.clientX - rect.left;
+              const ratio = Math.max(
+                0,
+                Math.min(1, (clientX - (60 / 800) * rect.width) / ((700 / 800) * rect.width))
+              );
+              setHoverTime(Math.round(ratio * 15.0 * 10) / 10);
+            }}
+            onMouseLeave={() => setHoverTime(null)}
+          >
+            <defs>
+              <linearGradient id="liveAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="0%"
+                  stopColor={
+                    autonomySetting === 'suppressed' && simTime > activePreset.detectionTime
+                      ? '#f43f5e'
+                      : currentProbeY < 65
+                      ? '#f43f5e'
+                      : '#22d3ee'
+                  }
+                  stopOpacity="0.28"
+                />
+                <stop
+                  offset="100%"
+                  stopColor={
+                    autonomySetting === 'suppressed' && simTime > activePreset.detectionTime
+                      ? '#f43f5e'
+                      : currentProbeY < 65
+                      ? '#f43f5e'
+                      : '#22d3ee'
+                  }
+                  stopOpacity="0.0"
+                />
+              </linearGradient>
+            </defs>
+
+            {/* Safe Nominal Tolerance Band & Vertical Scale */}
+            {activePreset.id === 'collision' ? (
+              <g>
+                {/* Collision Orbital Altitude Ruler Ticks (Y-axis) */}
+                <line x1="50" y1="60" x2="60" y2="60" stroke="#22c55e" strokeWidth="1.2" />
+                <text x="10" y="63" fill="#22c55e" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                  542 km
+                </text>
+                <line x1="54" y1="95" x2="60" y2="95" stroke="#475569" strokeWidth="1" />
+                <text x="10" y="98" fill="#94a3b8" fontSize="8" fontFamily="monospace">
+                  538 km
+                </text>
+                <line x1="52" y1="130" x2="60" y2="130" stroke="#fbbf24" strokeWidth="1" />
+                <text x="10" y="133" fill="#fbbf24" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                  534 km
+                </text>
+                <line x1="50" y1="165" x2="60" y2="165" stroke="#f43f5e" strokeWidth="1.2" />
+                <text x="10" y="168" fill="#f43f5e" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                  530 km
+                </text>
+
+                {/* Nominal Orbit Safe Corridor at 541.80 km (Y=60) */}
+                <rect x="60" y="50" width="700" height="20" fill="#22c55e" fillOpacity="0.08" />
+                <line
+                  x1="60"
+                  y1="60"
+                  x2="760"
+                  y2="60"
+                  stroke="#22c55e"
+                  strokeWidth="1"
+                  strokeDasharray="4 4"
+                  opacity="0.75"
+                />
+                <text x="65" y="56" fill="#22c55e" fontSize="8" fontFamily="monospace" opacity="0.9">
+                  NOMINAL CIRCULAR LEO ORBIT // 541.80 km (TARGET ALTITUDE)
+                </text>
+
+                {/* Critical Atmospheric Re-entry Hazard Line at < 530 km (Y=165) */}
+                <line
+                  x1="60"
+                  y1="165"
+                  x2="760"
+                  y2="165"
+                  stroke="#f43f5e"
+                  strokeWidth="1.2"
+                  strokeDasharray="3 3"
+                  opacity="0.8"
+                />
+                <text x="65" y="177" fill="#f43f5e" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                  CRITICAL RE-ENTRY HAZARD THRESHOLD (&lt; 530.0 km) // RUNAWAY AERODYNAMIC DECAY
+                </text>
+              </g>
+            ) : (
+              <g>
+                <rect x="60" y="130" width="700" height="40" fill="#22c55e" fillOpacity="0.06" />
+                <line
+                  x1="60"
+                  y1="150"
+                  x2="760"
+                  y2="150"
+                  stroke="#22c55e"
+                  strokeWidth="1"
+                  strokeDasharray="4 4"
+                  opacity="0.6"
+                />
+                <text x="65" y="165" fill="#22c55e" fontSize="8" fontFamily="monospace" opacity="0.8">
+                  NOMINAL BAND // {activePreset.baselineMetric}
+                </text>
+
+                <line
+                  x1="60"
+                  y1="50"
+                  x2="760"
+                  y2="50"
+                  stroke="#f43f5e"
+                  strokeWidth="1.2"
+                  strokeDasharray="3 3"
+                  opacity="0.6"
+                />
+                <text x="65" y="44" fill="#f43f5e" fontSize="8" fontFamily="monospace">
+                  CRITICAL DAMAGE LIMIT (LVL 4 THRESHOLD) // {activePreset.telemetryChannel}
+                </text>
+              </g>
+            )}
+
+            {/* Uncorrected Catastrophic Projection Curve (Red dashed) - Dynamic with Severity */}
+            {(() => {
+              const uncorrectedPoints: string[] = [];
+              for (let t = 0; t <= 15.0; t += 0.1) {
+                uncorrectedPoints.push(`${getXForTime(t).toFixed(1)},${getYForTime(t, true).toFixed(1)}`);
+              }
+              const uncorrectedPathD = `M ${uncorrectedPoints.join(' L ')}`;
+              return (
+                <path
+                  d={uncorrectedPathD}
+                  fill="none"
+                  stroke="#f43f5e"
+                  strokeWidth="1.6"
+                  strokeDasharray="4 3"
+                  opacity="0.65"
+                />
+              );
+            })()}
+
+            {/* Closed-Loop / Remediated Predictive Ghost Trajectory (Dashed line for full 15s) */}
+            {(() => {
+              const ghostPoints: string[] = [];
+              for (let t = 0; t <= 15.0; t += 0.1) {
+                ghostPoints.push(`${getXForTime(t).toFixed(1)},${getYForTime(t, false).toFixed(1)}`);
+              }
+              const ghostPathD = `M ${ghostPoints.join(' L ')}`;
+              return (
+                <path
+                  d={ghostPathD}
+                  fill="none"
+                  stroke={autonomySetting === 'suppressed' ? '#f43f5e' : '#22d3ee'}
+                  strokeWidth="1.5"
+                  strokeDasharray="3 3"
+                  opacity={simTime > 0 ? 0.35 : 0.6}
+                />
+              );
+            })()}
+
+            {/* Specific Space Object Collision Pin & Altitude Delta Annotations */}
+            {activePreset.id === 'collision' && (
+              <g>
+                {(() => {
+                  const impactX = getXForTime(1.6);
+                  const impactY = 60; // Nominal flight altitude at point of impact
+                  const isImpactPassed = simTime >= 1.6;
+                  const altitudeLossKm = ((45 + (severityLevel - 1) * 20) * 0.0894).toFixed(2);
+                  const postImpactAltKm = (541.8 - parseFloat(altitudeLossKm)).toFixed(2);
+                  const postImpactY = 60 + 45 + (severityLevel - 1) * 20;
+
+                  return (
+                    <g>
+                      {/* 1. Pin marking the space object and exact point of collision */}
+                      {/* Vertical Pin Flagpole line */}
+                      <line
+                        x1={impactX}
+                        y1={24}
+                        x2={impactX}
+                        y2={impactY}
+                        stroke="#f43f5e"
+                        strokeWidth="1.6"
+                        strokeDasharray="2 2"
+                        opacity={0.85}
+                      />
+
+                      {/* Pin Flag Header atop pole */}
+                      <g transform={`translate(${impactX}, 18)`}>
+                        <rect
+                          x="-88"
+                          y="-15"
+                          width="176"
+                          height="23"
+                          rx="5"
+                          fill="#0b0f19"
+                          stroke="#f43f5e"
+                          strokeWidth="1.2"
+                          filter="drop-shadow(0 0 8px rgba(244,63,94,0.35))"
+                        />
+                        {/* Downward pointer triangle */}
+                        <polygon points="0,8 -5,13 5,13" fill="#f43f5e" />
+
+                        {/* Debris target symbol */}
+                        <circle cx="-74" cy="-4" r="5" fill="#f43f5e" fillOpacity="0.25" />
+                        <circle cx="-74" cy="-4" r="2.5" fill="#f43f5e" />
+
+                        <text
+                          x="-64"
+                          y="-7"
+                          fill="#fda4af"
+                          fontSize="7.5"
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                        >
+                          SPACE OBJECT COLLISION PIN
+                        </text>
+                        <text
+                          x="-64"
+                          y="3"
+                          fill="#94a3b8"
+                          fontSize="6.5"
+                          fontFamily="monospace"
+                        >
+                          OBJ-49211 (2.4cm @ 11.2 km/s)
+                        </text>
+                      </g>
+
+                      {/* Concentric Impact Point Rings on the flight trajectory */}
+                      <g transform={`translate(${impactX}, ${impactY})`}>
+                        <circle
+                          r="6"
+                          fill="#f43f5e"
+                          fillOpacity={isImpactPassed ? 0.95 : 0.4}
+                          stroke="#ffffff"
+                          strokeWidth="1"
+                        />
+                        {/* Pulse shockwave rings */}
+                        <circle
+                          r="12"
+                          fill="none"
+                          stroke="#f43f5e"
+                          strokeWidth="1.2"
+                          strokeDasharray="3 2"
+                          opacity={isImpactPassed ? 0.85 : 0.3}
+                          className={isImpactPassed ? 'animate-ping' : ''}
+                        />
+                        <circle
+                          r="18"
+                          fill="none"
+                          stroke="#fbbf24"
+                          strokeWidth="0.8"
+                          opacity={0.4}
+                        />
+                        <text
+                          x="9"
+                          y="13"
+                          fill="#f43f5e"
+                          fontSize="7.5"
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                        >
+                          T+1.6s IMPACT POINT
+                        </text>
+                      </g>
+
+                      {/* 2. Visual Altitude Drop Dimension Bracket & Change Indicator */}
+                      <g transform={`translate(${impactX + 45}, 0)`}>
+                        {/* Pre-impact nominal level marker tick */}
+                        <line x1="-8" y1={impactY} x2="8" y2={impactY} stroke="#f43f5e" strokeWidth="1" />
+                        {/* Vertical dimension drop span line */}
+                        <line
+                          x1="0"
+                          y1={impactY}
+                          x2="0"
+                          y2={postImpactY}
+                          stroke="#f43f5e"
+                          strokeWidth="1.2"
+                          strokeDasharray="2 2"
+                        />
+                        {/* Post-impact drop level marker tick */}
+                        <line
+                          x1="-8"
+                          y1={postImpactY}
+                          x2="8"
+                          y2={postImpactY}
+                          stroke="#f43f5e"
+                          strokeWidth="1"
+                        />
+                        {/* Downward drop indicator arrow */}
+                        <polygon
+                          points={`0,${postImpactY} -4,${postImpactY - 7} 4,${postImpactY - 7}`}
+                          fill="#f43f5e"
+                        />
+
+                        {/* Altitude change callout box */}
+                        <g transform={`translate(12, ${(impactY + postImpactY) / 2 - 12})`}>
+                          <rect
+                            x="0"
+                            y="0"
+                            width="144"
+                            height="25"
+                            rx="5"
+                            fill="#05070a"
+                            stroke="#f43f5e"
+                            strokeWidth="1"
+                            filter="drop-shadow(0 0 6px rgba(244,63,94,0.25))"
+                          />
+                          <text
+                            x="6"
+                            y="10"
+                            fill="#fb7185"
+                            fontSize="8"
+                            fontFamily="monospace"
+                            fontWeight="bold"
+                          >
+                            ▼ ALTITUDE DROP: -{altitudeLossKm} km
+                          </text>
+                          <text
+                            x="6"
+                            y="20"
+                            fill="#94a3b8"
+                            fontSize="7"
+                            fontFamily="monospace"
+                          >
+                            Perigee post-impact: {postImpactAltKm} km
+                          </text>
+                        </g>
+                      </g>
+
+                      {/* 3. Trajectory Restoration Prograde Burn Indicator */}
+                      {autonomySetting !== 'suppressed' && (
+                        <g transform={`translate(${getXForTime(effectiveMitigationTime)}, ${postImpactY})`}>
+                          {/* Upward burn trajectory arrow */}
+                          <line
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2={impactY - postImpactY + 12}
+                            stroke="#22d3ee"
+                            strokeWidth="1.2"
+                            strokeDasharray="2 2"
+                          />
+                          <polygon
+                            points={`0,${impactY - postImpactY + 10} -4,${impactY - postImpactY + 17} 4,${impactY - postImpactY + 17}`}
+                            fill="#22d3ee"
+                          />
+                          <g transform="translate(8, -16)">
+                            <rect
+                              x="0"
+                              y="-8"
+                              width="134"
+                              height="22"
+                              rx="4"
+                              fill="#05070a"
+                              stroke="#22d3ee"
+                              strokeWidth="0.8"
+                            />
+                            <text
+                              x="6"
+                              y="2"
+                              fill="#38bdf8"
+                              fontSize="7.5"
+                              fontFamily="monospace"
+                              fontWeight="bold"
+                            >
+                              ▲ PROGRADE ΔV BURN
+                            </text>
+                            <text
+                              x="6"
+                              y="10"
+                              fill="#94a3b8"
+                              fontSize="6.5"
+                              fontFamily="monospace"
+                            >
+                              +4.2 m/s · Restoring 541.8 km
+                            </text>
+                          </g>
+                        </g>
+                      )}
+                    </g>
+                  );
+                })()}
+              </g>
+            )}
+
+            {/* Dynamic Live Streamed Trajectory (Solid up to simTime) */}
+            {simTime > 0 &&
+              (() => {
+                const livePoints: string[] = [];
+                const maxSampleT = Math.min(15.0, simTime);
+                for (let t = 0; t <= maxSampleT; t += 0.05) {
+                  livePoints.push(`${getXForTime(t).toFixed(1)},${getYForTime(t, false).toFixed(1)}`);
+                }
+                if (maxSampleT % 0.05 !== 0) {
+                  livePoints.push(
+                    `${getXForTime(maxSampleT).toFixed(1)},${getYForTime(maxSampleT, false).toFixed(1)}`
+                  );
+                }
+                const livePathD = livePoints.length > 1 ? `M ${livePoints.join(' L ')}` : '';
+                const baselineFillY = activePreset.id === 'collision' ? 60 : 150;
+                const liveAreaD =
+                  livePoints.length > 1
+                    ? `M ${getXForTime(0).toFixed(1)},${baselineFillY} L ${livePoints.join(' L ')} L ${getXForTime(
+                        maxSampleT
+                      ).toFixed(1)},${baselineFillY} Z`
+                    : '';
+
+                let strokeColor = '#22d3ee';
+                if (autonomySetting === 'suppressed' && simTime > activePreset.detectionTime) {
+                  strokeColor = '#f43f5e';
+                } else if (activePreset.id === 'collision') {
+                  if (simTime < 1.6) strokeColor = '#22c55e';
+                  else if (currentProbeY > 115) strokeColor = '#f43f5e';
+                  else if (currentProbeY > 75) strokeColor = '#fbbf24';
+                  else strokeColor = '#22c55e';
+                } else {
+                  if (currentProbeY < 65) strokeColor = '#f43f5e';
+                  else if (currentProbeY < 120) strokeColor = '#fbbf24';
+                  else strokeColor = '#22d3ee';
+                }
+
+                return (
+                  <g>
+                    {/* Area fill under live curve */}
+                    <path d={liveAreaD} fill="url(#liveAreaGradient)" />
+                    {/* Solid live trace */}
+                    <path
+                      d={livePathD}
+                      fill="none"
+                      stroke={strokeColor}
+                      strokeWidth="2.8"
+                      strokeLinecap="round"
+                    />
+                  </g>
+                );
+              })()}
+
+            {/* Stage Event Points on Curve - Dynamically Calculated */}
+            {(() => {
+              const pInject = {
+                t: 0,
+                x: getXForTime(0),
+                y: getYForTime(0, false),
+                label: 'T+0s FAULT INJECT',
+                color: '#fbbf24',
+              };
+              const pDetect = {
+                t: activePreset.detectionTime,
+                x: getXForTime(activePreset.detectionTime),
+                y: getYForTime(activePreset.detectionTime, false),
+                label: `T+${activePreset.detectionTime}s DETECTED (${(severityLevel * 1.1 + 1.2).toFixed(1)}σ)`,
+                color: '#22d3ee',
+              };
+              const pMitigate = {
+                t: effectiveMitigationTime,
+                x: getXForTime(effectiveMitigationTime),
+                y: getYForTime(effectiveMitigationTime, false),
+                label:
+                  autonomySetting === 'suppressed'
+                    ? 'AUTONOMY OFF (NO MITIGATION)'
+                    : autonomySetting === 'hitl'
+                    ? `T+${effectiveMitigationTime.toFixed(1)}s HITL MITIGATE`
+                    : `T+${effectiveMitigationTime.toFixed(1)}s MITIGATION`,
+                color: autonomySetting === 'suppressed' ? '#f43f5e' : '#22c55e',
+              };
+              const pRecover = {
+                t: effectiveRecoveryTime,
+                x: getXForTime(effectiveRecoveryTime),
+                y: getYForTime(effectiveRecoveryTime, false),
+                label:
+                  autonomySetting === 'suppressed'
+                    ? 'TERMINAL CATASTROPHE'
+                    : `T+${effectiveRecoveryTime.toFixed(1)}s NOMINAL ENVELOPE`,
+                color: autonomySetting === 'suppressed' ? '#f43f5e' : '#22c55e',
+              };
+
+              return [pInject, pDetect, pMitigate, pRecover].map((pt, idx) => {
+                const isPassed = simTime >= pt.t;
+                return (
+                  <g key={idx} transform={`translate(${pt.x}, ${pt.y})`}>
+                    <circle
+                      r={isPassed ? 4.5 : 3}
+                      fill={pt.color}
+                      opacity={isPassed ? 1 : 0.4}
+                    />
+                    {isPassed && simRunning && Math.abs(simTime - pt.t) < 0.6 && (
+                      <circle r="9" fill={pt.color} fillOpacity="0.3" className="animate-ping" />
+                    )}
+                    <text
+                      x={idx === 3 ? -100 : 8}
+                      y={idx % 2 === 0 ? -9 : 14}
+                      fill={pt.color}
+                      fontSize="8"
+                      fontFamily="monospace"
+                      opacity={isPassed ? 1 : 0.5}
+                      fontWeight={isPassed ? 'bold' : 'normal'}
+                    >
+                      {pt.label}
+                    </text>
+                  </g>
+                );
+              });
+            })()}
+
+            {/* Live Streaming Probe Cursor at current simTime */}
+            {simTime > 0 && (
+              <g transform={`translate(${getXForTime(simTime)}, ${currentProbeY})`}>
+                <line
+                  x1="0"
+                  y1={-currentProbeY}
+                  x2="0"
+                  y2={200 - currentProbeY}
+                  stroke="#ffffff"
+                  strokeWidth="1"
+                  strokeDasharray="2 2"
+                  opacity="0.4"
+                />
+                <circle
+                  r="9"
+                  fill={
+                    autonomySetting === 'suppressed' && simTime > activePreset.detectionTime
+                      ? '#f43f5e'
+                      : activePreset.id === 'collision'
+                      ? currentProbeY > 115
+                        ? '#f43f5e'
+                        : currentProbeY > 75
+                        ? '#fbbf24'
+                        : '#22c55e'
+                      : currentProbeY < 65
+                      ? '#f43f5e'
+                      : currentProbeY < 120
+                      ? '#fbbf24'
+                      : '#22d3ee'
+                  }
+                  fillOpacity="0.3"
+                  className="animate-ping"
+                />
+                <circle
+                  r="4.5"
+                  fill={
+                    autonomySetting === 'suppressed' && simTime > activePreset.detectionTime
+                      ? '#f43f5e'
+                      : activePreset.id === 'collision'
+                      ? currentProbeY > 115
+                        ? '#f43f5e'
+                        : currentProbeY > 75
+                        ? '#fbbf24'
+                        : '#22c55e'
+                      : currentProbeY < 65
+                      ? '#f43f5e'
+                      : currentProbeY < 120
+                      ? '#fbbf24'
+                      : '#22d3ee'
+                  }
+                  stroke="#ffffff"
+                  strokeWidth="1.5"
+                />
+
+                {/* Live Floating Readout Badge */}
+                <g transform="translate(0, -18)">
+                  <rect
+                    x="-56"
+                    y="-10"
+                    width="112"
+                    height="16"
+                    rx="4"
+                    fill="#05070a"
+                    stroke={
+                      autonomySetting === 'suppressed' && simTime > activePreset.detectionTime
+                        ? '#f43f5e'
+                        : activePreset.id === 'collision'
+                        ? currentProbeY > 115
+                          ? '#f43f5e'
+                          : currentProbeY > 75
+                          ? '#fbbf24'
+                          : '#22c55e'
+                        : currentProbeY < 65
+                        ? '#f43f5e'
+                        : '#22d3ee'
+                    }
+                    strokeWidth="1"
+                  />
+                  <text
+                    x="0"
+                    y="2"
+                    textAnchor="middle"
+                    fill="#ffffff"
+                    fontSize="7.5"
+                    fontFamily="monospace"
+                    fontWeight="bold"
+                  >
+                    {liveValueText}
+                  </text>
+                </g>
+              </g>
+            )}
+
+            {/* Hover Tooltip Probe */}
+            {hoverTime !== null && (
+              <g transform={`translate(${getXForTime(hoverTime)}, 0)`}>
+                <line x1="0" y1="0" x2="0" y2="200" stroke="#94a3b8" strokeWidth="1" strokeDasharray="3 2" />
+                <circle cx="0" cy={getYForTime(hoverTime, false)} r="4" fill="#38bdf8" />
+                <g transform={`translate(0, ${Math.max(25, getYForTime(hoverTime, false) - 20)})`}>
+                  <rect
+                    x="-45"
+                    y="-12"
+                    width="90"
+                    height="18"
+                    rx="4"
+                    fill="#0f172a"
+                    stroke="#38bdf8"
+                    strokeWidth="1"
+                  />
+                  <text
+                    x="0"
+                    y="1"
+                    textAnchor="middle"
+                    fill="#38bdf8"
+                    fontSize="8"
+                    fontFamily="monospace"
+                  >
+                    T+{hoverTime.toFixed(1)}s: {getFormattedMetric(hoverTime)}
+                  </text>
+                </g>
+              </g>
+            )}
+          </svg>
+
+          {/* Bottom Time Axis Markers */}
+          <div className="absolute bottom-1 left-3 right-3 flex justify-between text-[8px] font-mono text-slate-400">
+            <span>T+00:00s (Inject)</span>
+            <span>
+              T+{activePreset.detectionTime.toFixed(1)}s (
+              {activePreset.id === 'collision' ? 'Impact / Detect' : 'Detect'})
+            </span>
+            <span>
+              T+{effectiveMitigationTime.toFixed(1)}s (
+              {autonomySetting === 'suppressed' ? 'Off' : autonomySetting === 'hitl' ? 'HITL' : 'Mitigate'})
+            </span>
+            <span>
+              T+{effectiveRecoveryTime.toFixed(1)}s (
+              {autonomySetting === 'suppressed' ? 'Runaway' : 'Recovered'})
+            </span>
+            <span>T+15:00s</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4-Stage Autonomous Self-Healing Pipeline - Bento Panel */}
+      <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl flex flex-col gap-4 shadow-xl">
+        <div className="flex items-center justify-between border-b border-[#1e293b]/60 pb-3">
+          <span className="text-xs uppercase text-slate-200 font-semibold tracking-wide">
+            Autonomous 4-Stage Self-Healing Execution Pipeline
+          </span>
+          <span className="text-[10px] font-mono text-green-400 font-semibold bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/30">
+            EST. RECOVERY TIME: {autonomySetting === 'suppressed' ? 'UNRECOVERED' : `${effectiveRecoveryTime.toFixed(1)}s`}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-mono">
+          {/* Stage 1: Detection */}
+          <div
+            className={`p-4 rounded-2xl border flex flex-col justify-between transition-all shadow-sm ${
+              simTime >= activePreset.detectionTime
+                ? 'bg-[#05070a] border-green-400/60 text-white ring-1 ring-green-400/20'
+                : 'bg-[#05070a] border-[#1e293b] text-slate-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-cyan-400 font-bold">01 // DETECTION</span>
+              {simTime >= activePreset.detectionTime ? (
+                <CheckCircle2 size={14} className="text-green-400" />
+              ) : (
+                <span className="text-[9px] text-slate-400">T+{activePreset.detectionTime}s</span>
+              )}
+            </div>
+            <div className="text-xs font-semibold my-1 text-slate-100">
+              Sensor Variance &gt; {(severityLevel * 1.1 + 1.2).toFixed(1)}σ
+            </div>
+            <div className="text-[9px] text-slate-400">
+              Agent-Alpha identified rate spike above statistical noise floor.
+            </div>
+          </div>
+
+          {/* Stage 2: Isolation & RCA */}
+          <div
+            className={`p-4 rounded-2xl border flex flex-col justify-between transition-all shadow-sm ${
+              simTime >= activePreset.detectionTime + 1.0
+                ? 'bg-[#05070a] border-green-400/60 text-white ring-1 ring-green-400/20'
+                : 'bg-[#05070a] border-[#1e293b] text-slate-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-cyan-400 font-bold">02 // ISOLATION & RCA</span>
+              {simTime >= activePreset.detectionTime + 1.0 ? (
+                <CheckCircle2 size={14} className="text-green-400" />
+              ) : (
+                <span className="text-[9px] text-slate-400">
+                  T+{(activePreset.detectionTime + 1.0).toFixed(1)}s
+                </span>
+              )}
+            </div>
+            <div className="text-xs font-semibold my-1 text-slate-100">Bayesian Root Cause</div>
+            <div className="text-[9px] text-slate-400">
+              Agent-Delta FDIR isolated {activePreset.subsystem.toLowerCase()} fault via telemetry correlation.
+            </div>
+          </div>
+
+          {/* Stage 3: Swarm Consensus */}
+          <div
+            className={`p-4 rounded-2xl border flex flex-col justify-between transition-all shadow-sm ${
+              autonomySetting === 'suppressed'
+                ? 'bg-[#05070a] border-rose-500/50 text-rose-300'
+                : simTime >= effectiveMitigationTime
+                ? 'bg-[#05070a] border-green-400/60 text-white ring-1 ring-green-400/20'
+                : 'bg-[#05070a] border-[#1e293b] text-slate-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-cyan-400 font-bold">03 // SWARM CONSENSUS</span>
+              {autonomySetting === 'suppressed' ? (
+                <span className="text-[9px] text-rose-400 font-bold">SUPPRESSED</span>
+              ) : simTime >= effectiveMitigationTime ? (
+                <CheckCircle2 size={14} className="text-green-400" />
+              ) : (
+                <span className="text-[9px] text-slate-400">T+{effectiveMitigationTime.toFixed(1)}s</span>
+              )}
+            </div>
+            <div className="text-xs font-semibold my-1 text-slate-100">
+              {autonomySetting === 'suppressed'
+                ? 'Autonomous Mitigation Disabled'
+                : autonomySetting === 'hitl'
+                ? 'HITL Gate Approved'
+                : 'Raft-BFT 4/4 Quorum'}
+            </div>
+            <div className="text-[9px] text-slate-400">
+              {autonomySetting === 'suppressed'
+                ? 'Open-loop mode: no mitigation commands dispatched.'
+                : 'Mesh signed remediation plan without ground station uplink.'}
+            </div>
+          </div>
+
+          {/* Stage 4: Execution & Verification */}
+          <div
+            className={`p-4 rounded-2xl border flex flex-col justify-between transition-all shadow-sm ${
+              autonomySetting === 'suppressed' && simTime >= activePreset.detectionTime
+                ? 'bg-[#05070a] border-rose-500/50 text-rose-400'
+                : simTime >= effectiveRecoveryTime
+                ? 'bg-[#05070a] border-green-400/60 text-white ring-1 ring-green-400/20'
+                : 'bg-[#05070a] border-[#1e293b] text-slate-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-cyan-400 font-bold">04 // VERIFY & RESTORE</span>
+              {autonomySetting === 'suppressed' && simTime >= activePreset.detectionTime ? (
+                <span className="text-[9px] text-rose-400 font-bold">FAILURE</span>
+              ) : simTime >= effectiveRecoveryTime ? (
+                <CheckCircle2 size={14} className="text-green-400" />
+              ) : (
+                <span className="text-[9px] text-slate-400">T+{effectiveRecoveryTime.toFixed(1)}s</span>
+              )}
+            </div>
+            <div className="text-xs font-semibold my-1 text-slate-100">
+              {autonomySetting === 'suppressed' && simTime >= activePreset.detectionTime
+                ? 'Catastrophic Runaway'
+                : 'Flight Envelope Nominal'}
+            </div>
+            <div className="text-[9px] text-slate-400">
+              {autonomySetting === 'suppressed' && simTime >= activePreset.detectionTime
+                ? 'Hardware damage limit breached. Safe recovery impossible.'
+                : 'Secondary cooling engaged, attitude stabilized, thermal drift arrested.'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Real-time Multi-Agent Diagnostic Command Journal & Live Uplink Injector - Bento Panel */}
+      <div className="bg-[#0f172a] border border-[#1e293b] p-5 rounded-3xl flex flex-col gap-4 shadow-xl">
+        <div className="flex items-center justify-between border-b border-[#1e293b]/60 pb-3">
+          <div className="flex items-center gap-2">
+            <Zap size={14} className="text-cyan-400" />
+            <span className="text-xs uppercase text-slate-200 font-semibold tracking-wide">
+              Live Diagnostic Command Journal & Trace Log
+            </span>
+          </div>
+          <span className="text-[10px] font-mono text-slate-400">
+            {journalLogs.length} LOG EVENTS STREAMING
+          </span>
+        </div>
+
+        {/* Scrollable Log Container */}
+        <div
+          ref={journalContainerRef}
+          className="h-48 overflow-y-auto bg-[#05070a] p-4 rounded-2xl border border-[#1e293b] flex flex-col gap-2 font-mono text-xs shadow-inner"
+        >
+          {journalLogs.length === 0 ? (
+            <div className="text-slate-500 italic text-center my-auto py-8">
+              No active anomaly running. Click "RUN TEST HARNESS" above to inject a fault and observe live multi-agent reasoning traces.
+            </div>
+          ) : (
+            journalLogs.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-start gap-2.5 py-1 border-b border-[#1e293b]/40 last:border-0 hover:bg-[#0f172a]/60 rounded px-1.5 transition-colors"
+              >
+                <span className="text-slate-400 text-[10px] shrink-0">{entry.timestamp}</span>
+                <span className="text-cyan-400 font-semibold shrink-0 text-[11px]">{entry.agent}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase shrink-0 ${entry.tagColor}`}>
+                  {entry.tag}
+                </span>
+                <span className="text-slate-200 text-[11px] leading-tight break-all">{entry.message}</span>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Synthetic Parameter & Live Agent Prompt Override Input */}
+        <form onSubmit={handleTransmitOverride} className="flex gap-2.5">
+          <input
+            type="text"
+            value={customOverrideInput}
+            onChange={(e) => setCustomOverrideInput(e.target.value)}
+            placeholder="Inject live synthetic parameter or agent prompt override (e.g., SET_VALVE_PWM=40, SLEW_ROLL=-10)..."
+            className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#05070a] border border-[#1e293b] text-xs font-mono text-white placeholder:text-slate-500 focus:outline-hidden focus:border-cyan-400 shadow-inner"
+          />
+          <button
+            type="submit"
+            className="px-5 py-2.5 rounded-xl bg-cyan-500 text-black font-mono text-xs font-bold uppercase hover:bg-cyan-400 transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+          >
+            <Send size={13} />
+            TRANSMIT OVERRIDE
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};

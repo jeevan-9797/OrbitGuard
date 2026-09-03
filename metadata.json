@@ -1,0 +1,6 @@
+{
+  "name": "ASTRA-TWIN Satellite Operations & Autonomous Flight Sandbox",
+  "description": "Interactive aerospace digital twin, real-time multi-agent autonomous reasoning console, orbital trajectory tracking, and chaos anomaly injection sandbox.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
