@@ -1,4 +1,4 @@
-export type ActiveScreen = 'orbital-twin' | 'agent-mesh' | 'anomaly-lab' | 'analytics';
+export type ActiveScreen = 'orbital-twin' | 'agent-mesh' | 'anomaly-lab' | 'analytics' | 'propellantless';
 
 export type AutonomyMode = 'L4' | 'HITL' | 'OVERRIDE';
 

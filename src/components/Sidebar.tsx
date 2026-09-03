@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   PanelLeftClose,
   X,
+  Wind,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -58,6 +59,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       subtitle: 'Dynamic Trajectory Injection',
       icon: Flame,
       badge: 'TEST',
+    },
+    {
+      id: 'propellantless',
+      title: 'Propellantless Flight',
+      subtitle: 'Solar Sail, EDT & Aerotrim',
+      icon: Wind,
+      badge: 'FUEL-0',
     },
     {
       id: 'analytics',

@@ -7,6 +7,7 @@ import { OrbitalTwinScreen } from './components/OrbitalTwinScreen';
 import { AgentMeshScreen } from './components/AgentMeshScreen';
 import { ChaosAnomalyLabScreen } from './components/ChaosAnomalyLabScreen';
 import { AnalyticsScreen } from './components/AnalyticsScreen';
+import { PropellantlessControlScreen } from './components/PropellantlessControlScreen';
 import { sound } from './utils/audio';
 
 export default function App() {
@@ -106,6 +107,8 @@ export default function App() {
                 onUpdateAlertCount={(crit, warn) => setAgentAlertCount({ crit, warn })}
               />
             )}
+
+            {activeScreen === 'propellantless' && <PropellantlessControlScreen />}
 
             {activeScreen === 'analytics' && <AnalyticsScreen agents={agents} />}
           </div>
