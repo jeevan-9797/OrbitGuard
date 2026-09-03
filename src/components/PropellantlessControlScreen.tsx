@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { sound } from '../utils/audio';
 import { VideogameLoadingSlider } from './VideogameLoadingSlider';
 import {
@@ -213,19 +213,126 @@ export const PropellantlessControlScreen: React.FC = () => {
     netThrustMn = (inSunlight ? srpThrustMn : 0) + (isEdtBoosting ? edtThrustMn : -edtThrustMn) - aeroDragMn * 0.15;
   }
 
-  // Simulation tick loop
+  // Dynamic live oscilloscope calculation: reacts instantly to all parameter slider adjustments
+  // Computes a 600-second window spanning T-600s to T-0s (Live) modulated by active slider values and orbit phase
+  const OSCILLOSCOPE_WINDOW_SEC = 600;
+  const NUM_POINTS = 60;
+  const oscilloscopePoints = useMemo(() => {
+    const pts = [];
+    const stepSec = OSCILLOSCOPE_WINDOW_SEC / (NUM_POINTS - 1);
+
+    for (let i = 0; i < NUM_POINTS; i++) {
+      const offsetSec = (i - (NUM_POINTS - 1)) * stepSec; // from -600s to 0s
+      const t = simTime + offsetSec;
+      const prog = (((t % orbitPeriodSec) + orbitPeriodSec) % orbitPeriodSec) / orbitPeriodSec;
+      const ptSunlight = prog < 0.62;
+
+      // 1. Solar Radiation Pressure component at this orbital station
+      const ptRadPressure = (1361 / 3e8) * (1 + sailReflectivity / 100);
+      const ptEffectiveSailArea = sailArea * Math.cos((sailAngle * Math.PI) / 180);
+      const ptSrp = ptSunlight
+        ? ptRadPressure * ptEffectiveSailArea * 1000 * Math.cos((sailAngle * Math.PI) / 180) * (0.92 + 0.08 * Math.cos(prog * Math.PI * 2))
+        : 0;
+
+      // 2. Electrodynamic Lorentz Force at this station (B-field dipole harmonic)
+      const ptEdt =
+        (tetherCurrent >= 0 ? 1 : -1) *
+        Math.abs(tetherCurrent) *
+        (tetherLength * 1000) *
+        3.8e-5 *
+        1000 *
+        (0.93 + 0.07 * Math.sin(prog * Math.PI * 4));
+
+      // 3. Aerodynamic Drag at this station
+      const ptEffectiveAeroArea = 0.8 + arrayArea * Math.sin((featherAngle * Math.PI) / 180);
+      const ptAero =
+        -0.5 *
+        rhoBase *
+        (vOrbital * vOrbital) *
+        2.2 *
+        ptEffectiveAeroArea *
+        1000 *
+        (1 + 0.05 * Math.cos(prog * Math.PI * 2));
+
+      let ptThrust = 0;
+      if (selectedMethod === 'solar_sail') {
+        ptThrust = ptSrp;
+      } else if (selectedMethod === 'electrodynamic') {
+        ptThrust = ptEdt;
+      } else if (selectedMethod === 'aerodrag') {
+        ptThrust = ptAero;
+      } else {
+        ptThrust = ptSrp + ptEdt + ptAero * 0.15;
+      }
+
+      // If at live now (i === NUM_POINTS - 1), lock directly to instantaneous netThrustMn
+      if (i === NUM_POINTS - 1) {
+        ptThrust = netThrustMn;
+      }
+
+      // Projected / accumulated altitude across the window
+      const ptAlt = Math.max(0, altDeltaMeters + (offsetSec / 600) * Math.max(1, Math.abs(netThrustMn) * 4));
+
+      pts.push({
+        idx: i,
+        timeSec: t,
+        offsetSec,
+        thrustMn: ptThrust,
+        altitudeMeters: ptAlt,
+        inSunlight: ptSunlight,
+      });
+    }
+    return pts;
+  }, [
+    simTime,
+    orbitPeriodSec,
+    sailReflectivity,
+    sailArea,
+    sailAngle,
+    tetherCurrent,
+    tetherLength,
+    arrayArea,
+    featherAngle,
+    rhoBase,
+    vOrbital,
+    selectedMethod,
+    netThrustMn,
+    altDeltaMeters,
+  ]);
+
+  // Interactive hover inspection state on live oscilloscope
+  const [hoverOscillo, setHoverOscillo] = useState<{
+    svgX: number;
+    offsetSec: number;
+    thrustMn: number;
+    altMeters: number;
+    inSunlight: boolean;
+  } | null>(null);
+
+  // Simulation tick loop with stable refs for smooth execution
+  const netThrustRef = useRef(netThrustMn);
+  netThrustRef.current = netThrustMn;
+  const simSpeedRef = useRef(simSpeed);
+  simSpeedRef.current = simSpeed;
+  const inSunlightRef = useRef(inSunlight);
+  inSunlightRef.current = inSunlight;
+
   useEffect(() => {
     if (!isRunning) return;
 
     const interval = setInterval(() => {
-      setSimTime((prev) => prev + simSpeed);
+      const speed = simSpeedRef.current;
+      const currentNetThrust = netThrustRef.current;
+      const sunlit = inSunlightRef.current;
+
+      setSimTime((prev) => prev + speed);
 
       // Mass of ASTRA-7 satellite: ~450 kg
       const massKg = 450;
       // Acceleration in m/s^2: F (in N) / mass
-      const accelMs2 = (netThrustMn / 1000) / massKg;
-      const stepDeltaV = Math.abs(accelMs2 * simSpeed);
-      const stepAlt = (accelMs2 * simSpeed * simSpeed * 0.5 + accelMs2 * 50 * simSpeed);
+      const accelMs2 = (currentNetThrust / 1000) / massKg;
+      const stepDeltaV = Math.abs(accelMs2 * speed);
+      const stepAlt = (accelMs2 * speed * speed * 0.5 + accelMs2 * 50 * speed);
 
       setDeltaVAccum((prev) => prev + stepDeltaV * 0.05);
       setAltDeltaMeters((prev) => prev + stepAlt * 0.02);
@@ -233,16 +340,16 @@ export const PropellantlessControlScreen: React.FC = () => {
       const fuelPerMeterPerSec = (massKg * 1) / (220 * 9.80665); // kg per m/s
       setFuelSavedKg((prev) => prev + (stepDeltaV * 0.05 * fuelPerMeterPerSec) / 100);
 
-      // Append to history buffer
+      // Keep history telemetry buffer synced
       setHistory((prev) => {
         const nextTime = prev.length > 0 ? prev[prev.length - 1].timeSec + 15 : 0;
         const newPt: SimulationPoint = {
           timeSec: nextTime,
-          thrustMn: netThrustMn,
-          deltaV: deltaVAccum,
-          altitudeMeters: altDeltaMeters,
+          thrustMn: currentNetThrust,
+          deltaV: stepDeltaV,
+          altitudeMeters: stepAlt,
           fuelSpent: 0,
-          inSunlight,
+          inSunlight: sunlit,
         };
         const trimmed = [...prev.slice(1), newPt];
         return trimmed;
@@ -250,7 +357,7 @@ export const PropellantlessControlScreen: React.FC = () => {
     }, 200);
 
     return () => clearInterval(interval);
-  }, [isRunning, simSpeed, netThrustMn, deltaVAccum, altDeltaMeters, inSunlight]);
+  }, [isRunning]);
 
   // High-Clarity Canvas Renderer for Orbital Vector Mechanics
   useEffect(() => {
@@ -957,6 +1064,30 @@ export const PropellantlessControlScreen: React.FC = () => {
 
   const handleCanvasMouseLeave = () => {
     setHoveredPoint(null);
+  };
+
+  const handleOscilloscopeMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const clientX = e.clientX - rect.left;
+    const xPct = Math.max(0, Math.min(1, clientX / rect.width));
+    const svgX = xPct * 400;
+
+    const idx = Math.round(xPct * (oscilloscopePoints.length - 1));
+    const pt = oscilloscopePoints[Math.max(0, Math.min(oscilloscopePoints.length - 1, idx))];
+    if (pt) {
+      setHoverOscillo({
+        svgX,
+        offsetSec: Math.round(pt.offsetSec),
+        thrustMn: pt.thrustMn,
+        altMeters: pt.altitudeMeters,
+        inSunlight: pt.inSunlight,
+      });
+    }
+  };
+
+  const handleOscilloscopeMouseLeave = () => {
+    setHoverOscillo(null);
   };
 
   const handleApplyPreset = (preset: ScenarioPreset) => {
@@ -1678,78 +1809,215 @@ export const PropellantlessControlScreen: React.FC = () => {
 
             {/* Render Tab 2: Real-time SVG Oscilloscope Chart */}
             {activeTab === 'oscilloscope' && (
-              <div className="w-full h-[360px] bg-[#020408] rounded-2xl p-4 flex flex-col justify-between border border-[#1e293b] font-mono">
-                <div className="flex items-center justify-between text-xs text-slate-400">
-                  <div className="flex items-center gap-3">
-                    <span className="text-yellow-400 font-bold flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-yellow-400" />
-                      MICRO-THRUST (mN)
-                    </span>
-                    <span className="text-cyan-400 font-bold flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                      ALTITUDE Δh (m)
-                    </span>
-                    <span className="text-green-400 font-bold flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-green-400" />
-                      FUEL SPENT: 0.000g
+              <div className="w-full min-h-[400px] bg-[#020408] rounded-2xl p-4 flex flex-col justify-between gap-3 border border-[#1e293b] font-mono shadow-inner">
+                {/* Channel Status Header */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs border-b border-[#1e293b]/70 pb-2.5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1.5 bg-[#0a1120] px-2.5 py-1 rounded-lg border border-[#1e293b]">
+                      <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse inline-block shadow-[0_0_6px_#facc15]" />
+                      <span className="text-yellow-400 font-bold text-[11px]">
+                        CH1 (THRUST): {netThrustMn >= 0 ? '+' : ''}{netThrustMn.toFixed(2)} mN
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-[#0a1120] px-2.5 py-1 rounded-lg border border-[#1e293b]">
+                      <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block" />
+                      <span className="text-cyan-400 font-bold text-[11px]">
+                        CH2 (ALTITUDE): +{altDeltaMeters.toFixed(1)} m
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-[#0a1120] px-2.5 py-1 rounded-lg border border-[#1e293b]">
+                      <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+                      <span className="text-green-400 font-bold text-[11px]">
+                        CH3 (PROPELLANT): 0.000 g
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 hidden sm:inline">600s SLIDING WINDOW</span>
+                    <span
+                      className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold border ${
+                        isRunning
+                          ? 'bg-yellow-400/10 text-yellow-300 border-yellow-400/30'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      {isRunning ? 'SWEEPING' : 'HOLD (PAUSED)'}
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-500">600s SLIDING WINDOW</span>
                 </div>
 
-                {/* SVG Polyline Live Graph */}
-                <div className="relative w-full h-64 bg-[#05070a] rounded-xl border border-[#1e293b] overflow-hidden p-2">
-                  {/* Grid Lines */}
-                  <div className="absolute inset-0 grid grid-rows-4 grid-cols-6 pointer-events-none opacity-15">
-                    {Array.from({ length: 24 }).map((_, i) => (
-                      <div key={i} className="border-b border-r border-slate-500" />
-                    ))}
-                  </div>
+                {/* Sub-header Inspection / Marker Banner */}
+                <div className="h-6 flex items-center justify-between text-[10.5px] px-2 bg-[#05070a] rounded-lg border border-[#1e293b]">
+                  {hoverOscillo ? (
+                    <div className="w-full flex items-center justify-between text-yellow-300">
+                      <span className="font-bold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full" />
+                        MARKER T {hoverOscillo.offsetSec >= 0 ? '+' : ''}{hoverOscillo.offsetSec}s
+                      </span>
+                      <span>
+                        F_net: <strong className="text-white">{hoverOscillo.thrustMn >= 0 ? '+' : ''}{hoverOscillo.thrustMn.toFixed(2)} mN</strong>
+                      </span>
+                      <span>
+                        Δh: <strong className="text-cyan-300">+{hoverOscillo.altMeters.toFixed(1)} m</strong>
+                      </span>
+                      <span className={hoverOscillo.inSunlight ? 'text-yellow-400' : 'text-purple-400'}>
+                        {hoverOscillo.inSunlight ? '☀️ SUNLIT ARC' : '🌑 EARTH UMBRA (F_SRP = 0)'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="w-full flex items-center justify-between text-slate-400 text-[10px]">
+                      <span>INTERACTIVE TRACE — HOVER TO PROBE TIME SAMPLES</span>
+                      <span className="text-yellow-400/80">
+                        SLIDERS MODULATE LIVE WAVEFORM INSTANTLY
+                      </span>
+                    </div>
+                  )}
+                </div>
 
-                  <svg className="w-full h-full overflow-visible" viewBox="0 0 400 200" preserveAspectRatio="none">
-                    {/* Zero line */}
-                    <line x1="0" y1="100" x2="400" y2="100" stroke="#334155" strokeWidth="1" strokeDasharray="2,2" />
+                {/* SVG Polyline Live Graph with Calibration Graticule */}
+                <div className="relative w-full h-64 bg-[#05070a] rounded-xl border border-[#1e293b] overflow-hidden p-1">
+                  <svg
+                    className="w-full h-full overflow-visible cursor-crosshair select-none"
+                    viewBox="0 0 400 200"
+                    preserveAspectRatio="none"
+                    onMouseMove={handleOscilloscopeMouseMove}
+                    onMouseLeave={handleOscilloscopeMouseLeave}
+                  >
+                    {/* Background Umbra Eclipse Pass Shading */}
+                    {oscilloscopePoints.map((pt, idx) => {
+                      if (pt.inSunlight) return null;
+                      const colW = 400 / (oscilloscopePoints.length - 1);
+                      const x = (idx / (oscilloscopePoints.length - 1)) * 400 - colW / 2;
+                      return (
+                        <rect
+                          key={`umbra-${idx}`}
+                          x={Math.max(0, x)}
+                          y="0"
+                          width={colW + 0.5}
+                          height="200"
+                          fill="#312e81"
+                          opacity="0.25"
+                        />
+                      );
+                    })}
 
-                    {/* Fuel line (strictly zero flat line at bottom) */}
-                    <line x1="0" y1="195" x2="400" y2="195" stroke="#22c55e" strokeWidth="2" />
+                    {/* Graticule Grid Lines & Calibration Marks */}
+                    <line x1="38" y1="20" x2="390" y2="20" stroke="#1e293b" strokeWidth="1" strokeDasharray="2,2" />
+                    <text x="6" y="23" fill="#64748b" fontSize="7.5" fontFamily="monospace">+50 mN</text>
 
-                    {/* Thrust Polyline (Yellow) */}
-                    <polyline
-                      fill="none"
-                      stroke="#facc15"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      points={history
-                        .map((pt, idx) => {
-                          const x = (idx / (history.length - 1)) * 400;
-                          // Scale thrust (-20mN to +60mN) to Y (200 to 0)
-                          const y = Math.max(10, Math.min(190, 100 - (pt.thrustMn / 50) * 80));
-                          return `${x},${y}`;
-                        })
-                        .join(' ')}
-                    />
+                    <line x1="38" y1="60" x2="390" y2="60" stroke="#1e293b" strokeWidth="1" strokeDasharray="2,2" />
+                    <text x="6" y="63" fill="#64748b" fontSize="7.5" fontFamily="monospace">+25 mN</text>
 
-                    {/* Altitude Offset Polyline (Cyan) */}
+                    {/* Reference Zero Null Line */}
+                    <line x1="38" y1="100" x2="390" y2="100" stroke="#475569" strokeWidth="1.2" strokeDasharray="3,3" />
+                    <text x="6" y="103" fill="#e2e8f0" fontSize="8" fontWeight="bold" fontFamily="monospace">0 mN</text>
+
+                    <line x1="38" y1="140" x2="390" y2="140" stroke="#1e293b" strokeWidth="1" strokeDasharray="2,2" />
+                    <text x="6" y="143" fill="#64748b" fontSize="7.5" fontFamily="monospace">-25 mN</text>
+
+                    <line x1="38" y1="180" x2="390" y2="180" stroke="#1e293b" strokeWidth="1" strokeDasharray="2,2" />
+                    <text x="6" y="183" fill="#64748b" fontSize="7.5" fontFamily="monospace">-50 mN</text>
+
+                    {/* Right-Side Altitude Scale Marks */}
+                    <text x="395" y="23" fill="#38bdf8" fontSize="7" fontFamily="monospace" textAnchor="end">+400m</text>
+                    <text x="395" y="103" fill="#38bdf8" fontSize="7" fontFamily="monospace" textAnchor="end">+200m</text>
+                    <text x="395" y="183" fill="#38bdf8" fontSize="7" fontFamily="monospace" textAnchor="end">0m</text>
+
+                    {/* Chemical Fuel spent line (strictly flat 0 at bottom) */}
+                    <line x1="38" y1="195" x2="400" y2="195" stroke="#22c55e" strokeWidth="2" />
+
+                    {/* Altitude Offset Polyline (Cyan dashed) */}
                     <polyline
                       fill="none"
                       stroke="#38bdf8"
                       strokeWidth="1.5"
                       strokeDasharray="4,2"
-                      points={history
+                      opacity="0.8"
+                      points={oscilloscopePoints
                         .map((pt, idx) => {
-                          const x = (idx / (history.length - 1)) * 400;
+                          const x = (idx / (oscilloscopePoints.length - 1)) * 400;
                           const y = Math.max(15, Math.min(185, 180 - (pt.altitudeMeters / 400) * 150));
-                          return `${x},${y}`;
+                          return `${x.toFixed(1)},${y.toFixed(1)}`;
                         })
                         .join(' ')}
                     />
+
+                    {/* Instantaneous Net Micro-Thrust Polyline (Yellow) */}
+                    <polyline
+                      fill="none"
+                      stroke="#facc15"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]"
+                      points={oscilloscopePoints
+                        .map((pt, idx) => {
+                          const x = (idx / (oscilloscopePoints.length - 1)) * 400;
+                          // Scale thrust (-50mN to +50mN) to Y (180 to 20), 0mN at y=100
+                          const y = Math.max(12, Math.min(188, 100 - (pt.thrustMn / 50) * 80));
+                          return `${x.toFixed(1)},${y.toFixed(1)}`;
+                        })
+                        .join(' ')}
+                    />
+
+                    {/* Live Probe Needle at T - 0s (Rightmost Point) */}
+                    <g>
+                      <circle
+                        cx="400"
+                        cy={Math.max(12, Math.min(188, 100 - (netThrustMn / 50) * 80))}
+                        r="4.5"
+                        fill="#facc15"
+                        className="animate-pulse"
+                      />
+                      <circle
+                        cx="400"
+                        cy={Math.max(12, Math.min(188, 100 - (netThrustMn / 50) * 80))}
+                        r="9"
+                        fill="none"
+                        stroke="#facc15"
+                        strokeWidth="1.2"
+                        opacity="0.6"
+                      />
+                    </g>
+
+                    {/* Interactive Measurement Reticle when Hovered */}
+                    {hoverOscillo && (
+                      <g>
+                        <line
+                          x1={hoverOscillo.svgX}
+                          y1="0"
+                          x2={hoverOscillo.svgX}
+                          y2="200"
+                          stroke="#facc15"
+                          strokeWidth="1.2"
+                          strokeDasharray="3,2"
+                          opacity="0.8"
+                        />
+                        <circle
+                          cx={hoverOscillo.svgX}
+                          cy={Math.max(12, Math.min(188, 100 - (hoverOscillo.thrustMn / 50) * 80))}
+                          r="4"
+                          fill="#facc15"
+                          stroke="#020408"
+                          strokeWidth="1.5"
+                        />
+                      </g>
+                    )}
                   </svg>
                 </div>
 
-                <div className="flex justify-between text-[10px] text-slate-500">
+                {/* Horizontal Time Axis Scale */}
+                <div className="flex justify-between text-[10px] text-slate-500 px-1 border-t border-[#1e293b]/60 pt-1.5">
                   <span>T - 600s</span>
+                  <span>T - 450s</span>
                   <span>T - 300s</span>
-                  <span>T - 0s (LIVE NOW)</span>
+                  <span>T - 150s</span>
+                  <span className="text-yellow-400 font-bold">
+                    T - 0s (LIVE NOW: {netThrustMn >= 0 ? '+' : ''}{netThrustMn.toFixed(2)} mN)
+                  </span>
                 </div>
               </div>
             )}
