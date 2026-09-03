@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AgentStatus, HistoricalIncident } from '../types';
 import { HISTORICAL_INCIDENTS } from '../data/mockFlightData';
+import { DatabaseExplorerView } from './DatabaseExplorerView';
 import { sound } from '../utils/audio';
 import {
   Download,
@@ -12,6 +13,8 @@ import {
   BatteryCharging,
   Flame,
   FileSpreadsheet,
+  Database,
+  Layers,
 } from 'lucide-react';
 
 interface AnalyticsScreenProps {
@@ -19,6 +22,7 @@ interface AnalyticsScreenProps {
 }
 
 export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ agents }) => {
+  const [activeTab, setActiveTab] = useState<'analytics' | 'database'>('analytics');
   const [incidentFilter, setIncidentFilter] = useState<string>('ALL');
   const [incidents] = useState<HistoricalIncident[]>(HISTORICAL_INCIDENTS);
   const [telemetryTimeframe, setTelemetryTimeframe] = useState<'30D' | '60D' | '90D'>('90D');
@@ -86,8 +90,45 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ agents }) => {
 
   return (
     <div className="w-full flex flex-col gap-4">
-      {/* Header Bar with Export Options */}
-      <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
+      {/* Top Mode Switcher */}
+      <div className="flex items-center gap-2 border-b border-[#1e293b] pb-2 font-mono text-xs">
+        <button
+          onClick={() => {
+            sound.playClick();
+            setActiveTab('analytics');
+          }}
+          className={`px-4 py-2 rounded-xl flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'analytics'
+              ? 'bg-cyan-500 text-black font-bold shadow-md'
+              : 'bg-[#0f172a] text-slate-400 hover:text-white border border-[#1e293b]'
+          }`}
+        >
+          <TrendingUp size={14} />
+          OPERATIONAL ANALYTICS & MTTR
+        </button>
+
+        <button
+          onClick={() => {
+            sound.playClick();
+            setActiveTab('database');
+          }}
+          className={`px-4 py-2 rounded-xl flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'database'
+              ? 'bg-cyan-500 text-black font-bold shadow-md'
+              : 'bg-[#0f172a] text-slate-400 hover:text-white border border-[#1e293b]'
+          }`}
+        >
+          <Database size={14} />
+          INGESTED FLIGHT DATABASE (17 TABLES)
+        </button>
+      </div>
+
+      {activeTab === 'database' ? (
+        <DatabaseExplorerView />
+      ) : (
+        <>
+          {/* Header Bar with Export Options */}
+          <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 shadow-sm">
             <TrendingUp size={20} />
@@ -390,6 +431,8 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ agents }) => {
           </table>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };
