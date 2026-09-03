@@ -702,12 +702,65 @@ export const OrbitalTwinScreen: React.FC<OrbitalTwinScreenProps> = ({
               </div>
             </div>
 
-            <div className="relative h-[220px] w-full bg-[#05070a] overflow-hidden">
-              <img
-                alt="Mercator Projection Ground Track Map"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuCHY-XJOeqHXCx6FjdGvlf0-8mGZ-nkZhKC0cOTsJXSJwzBZynvZZK3TcgjwdwUvs5uvR6pQIq-kWvSy6NIA86kInmCqn64hOANVWmydDRZkisP95RQz0qT5n8ZfzEYze3Xfrp7GE_Iwm4xd1ejFZ6O6JiRYJcQ73tBGCZanYIe0P9cPuqaK8EFBWckO_EOgz4Xe8D6JYCIsvnRvNVPtjM6_QLcFUrLGBXpx8Q4h0j6nptSfs308Ayp"
-                className="w-full h-full object-cover opacity-65"
-              />
+            <div className="relative h-[220px] w-full bg-[#030712] overflow-hidden">
+              {/* Vector Mercator Telemetry Grid & Continents */}
+              <svg viewBox="0 0 720 220" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+                <defs>
+                  {/* Subtle Radar Scan Grid Pattern */}
+                  <pattern id="mercator-grid" width="60" height="36.6" patternUnits="userSpaceOnUse">
+                    <path d="M 60 0 L 0 0 0 36.6" fill="none" stroke="#1e293b" strokeWidth="0.5" strokeOpacity="0.45" />
+                  </pattern>
+                  <linearGradient id="terminator-shade" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#000000" stopOpacity="0.55" />
+                    <stop offset="40%" stopColor="#000000" stopOpacity="0.55" />
+                    <stop offset="60%" stopColor="#000000" stopOpacity="0.0" />
+                    <stop offset="100%" stopColor="#000000" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+
+                {/* Ocean Background & Coordinate Grid */}
+                <rect width="720" height="220" fill="#030712" />
+                <rect width="720" height="220" fill="url(#mercator-grid)" />
+
+                {/* Day / Night Solar Terminator Shadow */}
+                <rect width="360" height="220" fill="url(#terminator-shade)" />
+
+                {/* Vector Continent Landmass Outlines (Aerospace Radar Style) */}
+                <g fill="#0b172a" stroke="#1e3a5f" strokeWidth="0.8" opacity="0.85">
+                  {/* North America */}
+                  <path d="M 60,35 L 120,25 L 170,30 L 195,50 L 160,85 L 150,110 L 130,135 L 120,130 L 125,105 L 105,90 L 80,95 L 60,70 Z" />
+                  {/* South America */}
+                  <path d="M 140,140 L 175,145 L 190,175 L 170,210 L 150,215 L 140,175 Z" />
+                  {/* Europe */}
+                  <path d="M 330,40 L 375,30 L 390,50 L 360,75 L 330,70 L 325,50 Z" />
+                  {/* Africa */}
+                  <path d="M 325,80 L 385,80 L 410,120 L 380,185 L 345,185 L 325,125 Z" />
+                  {/* Eurasia */}
+                  <path d="M 380,30 L 490,25 L 590,30 L 610,65 L 570,95 L 500,85 L 460,110 L 420,80 L 390,50 Z" />
+                  {/* Australia & Oceania */}
+                  <path d="M 540,140 L 595,135 L 615,170 L 565,185 L 535,165 Z" />
+                  {/* Greenland */}
+                  <path d="M 230,15 L 270,18 L 260,40 L 225,35 Z" />
+                  {/* Antarctica */}
+                  <path d="M 0,215 L 720,215 L 720,220 L 0,220 Z" />
+                </g>
+
+                {/* Latitude Reference Lines */}
+                <line x1="0" y1="110" x2="720" y2="110" stroke="#0ea5e9" strokeWidth="0.75" strokeDasharray="3 3" opacity="0.6" />
+                <line x1="0" y1="55" x2="720" y2="55" stroke="#334155" strokeWidth="0.5" strokeDasharray="2 4" />
+                <line x1="0" y1="165" x2="720" y2="165" stroke="#334155" strokeWidth="0.5" strokeDasharray="2 4" />
+
+                {/* Longitude Reference Lines */}
+                <line x1="360" y1="0" x2="360" y2="220" stroke="#0ea5e9" strokeWidth="0.75" strokeDasharray="3 3" opacity="0.5" />
+                <line x1="180" y1="0" x2="180" y2="220" stroke="#334155" strokeWidth="0.5" strokeDasharray="2 4" />
+                <line x1="540" y1="0" x2="540" y2="220" stroke="#334155" strokeWidth="0.5" strokeDasharray="2 4" />
+
+                {/* Coordinate Markers */}
+                <text x="8" y="106" fill="#64748b" fontSize="8" fontFamily="monospace">0° EQUATOR</text>
+                <text x="364" y="16" fill="#64748b" fontSize="8" fontFamily="monospace">0° MERIDIAN</text>
+                <text x="8" y="52" fill="#475569" fontSize="7" fontFamily="monospace">+45°N</text>
+                <text x="8" y="162" fill="#475569" fontSize="7" fontFamily="monospace">-45°S</text>
+              </svg>
 
               <svg className="absolute inset-0 w-full h-full pointer-events-none">
                 <path

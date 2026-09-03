@@ -1,14 +1,28 @@
 {
-  "name": "react-example",
+  "name": "astra7-satellite-digital-twin",
+  "version": "1.0.0",
+  "description": "Real-time aerospace digital twin, multi-agent swarm mission operations console, and propellantless trajectory correction laboratory for LEO satellite ASTRA-7.",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "keywords": [
+    "aerospace",
+    "satellite",
+    "digital-twin",
+    "orbitguard",
+    "gemini-ai",
+    "telemetry",
+    "mission-control",
+    "react19",
+    "typescript"
+  ],
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
+    "dev": "tsx server.ts",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:db": "python3 verify_database.py"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

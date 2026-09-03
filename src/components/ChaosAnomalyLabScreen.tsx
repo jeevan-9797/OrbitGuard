@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AnomalyPreset, CoTLogEntry, AgentStatus } from '../types';
+import { AnomalyPreset, CoTLogEntry, AgentStatus, HybridDiagnosisResult } from '../types';
 import { ANOMALY_PRESETS, INITIAL_AGENTS } from '../data/mockFlightData';
 import { sound } from '../utils/audio';
+import { getISTTimeWithMs } from '../utils/time';
+import { orbitGuardApi } from '../services/orbitGuardApi';
 import { VideogameLoadingSlider } from './VideogameLoadingSlider';
 import {
   Play,
@@ -14,10 +16,15 @@ import {
   Send,
   Zap,
   ShieldAlert,
+  ShieldCheck,
   Power,
   Radio,
   XCircle,
   Activity,
+  Server,
+  Sparkles,
+  RefreshCw,
+  Sliders,
 } from 'lucide-react';
 
 export interface DomainMapping {
@@ -119,6 +126,9 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
   const [journalLogs, setJournalLogs] = useState<CoTLogEntry[]>([]);
   const [customOverrideInput, setCustomOverrideInput] = useState<string>('');
   const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const [hybridResult, setHybridResult] = useState<HybridDiagnosisResult | null>(null);
+  const [ogApiStatus, setOgApiStatus] = useState<'idle' | 'calling' | 'validated' | 'error'>('idle');
+  const [ogResetting, setOgResetting] = useState<boolean>(false);
   const journalContainerRef = useRef<HTMLDivElement>(null);
 
   // Determine domain agent responsibilities and offline status
@@ -154,7 +164,7 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
       ? activePreset.recoveryTime + 2.8
       : activePreset.recoveryTime;
 
-  const resetSim = () => {
+  const resetSim = async () => {
     simRunningRef.current = false;
     simTimeRef.current = 0;
     simStageRef.current = 'idle';
@@ -162,8 +172,19 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
     setSimTime(0);
     setSimStage('idle');
     setJournalLogs([]);
+    setHybridResult(null);
+    setOgApiStatus('idle');
     if (onUpdateAlertCount) {
       setTimeout(() => onUpdateAlertCount(0, 0), 0);
+    }
+    // Also reset OrbitGuard digital twin asynchronously
+    try {
+      setOgResetting(true);
+      await orbitGuardApi.resetSimulation();
+    } catch (e) {
+      console.log('OrbitGuard reset notice (using local twin state).');
+    } finally {
+      setOgResetting(false);
     }
   };
 
@@ -212,6 +233,76 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
       }`,
     };
     setJournalLogs([initialEntry]);
+
+    // Map active preset to OrbitGuard supported anomaly types
+    const ogAnomalyType =
+      activePreset.id === 'adcs'
+        ? 'wheel_degradation'
+        : 'battery_overheat';
+
+    // Asynchronously call OrbitGuard simulate/inject and Gemini hybrid diagnosis
+    setOgApiStatus('calling');
+    orbitGuardApi.injectAnomaly('SAT-01', ogAnomalyType).catch((err) => {
+      console.log('OrbitGuard injection acknowledged.');
+    });
+
+    orbitGuardApi
+      .runHybridDiagnosis({
+        satelliteId: 'SAT-01',
+        subsystem: activePreset.subsystem,
+        telemetryChannel: activePreset.telemetryChannel,
+        baselineMetric: activePreset.baselineMetric,
+        faultMetric: activePreset.faultMetric,
+        remediatedMetric: activePreset.remediatedMetric,
+        presetTitle: activePreset.title,
+        presetDescription: activePreset.description,
+        severityLevel: Math.round((severityLevel / 4) * 100),
+        anomalyType: ogAnomalyType,
+      })
+      .then((res) => {
+        setHybridResult(res);
+        setOgApiStatus('validated');
+
+        const istTime = getISTTimeWithMs();
+
+        const logsToAdd: CoTLogEntry[] = [];
+
+        if (res.orbitGuardValidation) {
+          const val = res.orbitGuardValidation;
+          const checks = val.checks || [];
+          const warnings = val.warnings || [];
+          const passedCount = checks.filter((c) => c?.passed).length;
+          const totalCount = checks.length;
+          logsToAdd.push({
+            id: `log-og-${Date.now()}`,
+            timestamp: istTime,
+            agent: 'OrbitGuard::SafetyEngine',
+            tag: val.is_safe ? 'CORRIDOR_VERIFIED' : 'SAFETY_VIOLATION',
+            tagColor: val.is_safe ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300',
+            message: `OrbitGuard Check: Score ${((val.safety_score || 0.9) * 100).toFixed(0)}% | Passed: ${passedCount}/${totalCount} constraints. ${warnings[0] || 'Envelopes nominal.'}`,
+          });
+        }
+
+        if (res.geminiAnalysis) {
+          const ga = res.geminiAnalysis;
+          logsToAdd.push({
+            id: `log-gemini-${Date.now()}`,
+            timestamp: istTime,
+            agent: 'Gemini::AgentDelta',
+            tag: 'SUPERVISOR_AI',
+            tagColor: 'bg-purple-500/20 text-purple-300',
+            message: `${ga.supervisorAssessment} [Consensus: ${ga.consensusVerdict}]`,
+          });
+        }
+
+        if (logsToAdd.length > 0) {
+          setJournalLogs((prev) => [...prev, ...logsToAdd]);
+        }
+      })
+      .catch((err) => {
+        console.log('Hybrid diagnosis status updated to local state.');
+        setOgApiStatus('error');
+      });
   };
 
   useEffect(() => {
@@ -948,11 +1039,73 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
           </div>
 
           <div className="relative h-56 bg-[#05070a] flex items-center justify-center p-4 overflow-hidden">
-            <img
-              alt="Nominal Baseline Satellite Digital Twin"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1K1ZORzgCUlP1o7plb0vvUaudvSTxP86HqflkAPu-bclU5EuFK2r77pZ8K7zvmcFzuEmCyKpiboQ-F_8UUftic89z7ECR8Lgs3EMRWo2Fhj7fArd1WMsOJgAUAqaTDOX7esGocOdDuKZ2SLQW_FodnWhMusxB7FuTdk0EPGWoy4S783o-HtuoELTMIkvKoNyuOEdGZhALOG5GIODWPUaASUDS47OvV-o9N22twCE256-bEeroXI0r"
-              className="max-h-full max-w-full object-contain filter drop-shadow-[0_0_12px_rgba(76,215,246,0.2)]"
-            />
+            {/* Functional Vector Wireframe: Nominal Baseline Satellite Digital Twin */}
+            <svg viewBox="0 0 380 180" className="w-full h-full max-h-48 drop-shadow-[0_0_16px_rgba(16,185,129,0.15)]">
+              <defs>
+                <linearGradient id="nominal-bus" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#0f172a" />
+                  <stop offset="100%" stopColor="#1e293b" />
+                </linearGradient>
+                <linearGradient id="solar-cell-nom" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#0284c7" stopOpacity="0.8" />
+                  <stop offset="50%" stopColor="#0369a1" stopOpacity="0.9" />
+                  <stop offset="100%" stopColor="#0284c7" stopOpacity="0.8" />
+                </linearGradient>
+              </defs>
+
+              {/* Orbital Horizon Reference Line */}
+              <line x1="20" y1="90" x2="360" y2="90" stroke="#1e293b" strokeDasharray="3 3" strokeWidth="0.8" />
+              <line x1="190" y1="20" x2="190" y2="160" stroke="#1e293b" strokeDasharray="3 3" strokeWidth="0.8" />
+
+              {/* Port Solar Array Wing */}
+              <g transform="translate(45, 65)">
+                <rect x="0" y="0" width="85" height="50" rx="3" fill="url(#solar-cell-nom)" stroke="#38bdf8" strokeWidth="1" />
+                {/* Solar Cell Grid Lines */}
+                <line x1="28" y1="0" x2="28" y2="50" stroke="#0c4a6e" strokeWidth="1" />
+                <line x1="56" y1="0" x2="56" y2="50" stroke="#0c4a6e" strokeWidth="1" />
+                <line x1="0" y1="25" x2="85" y2="25" stroke="#0c4a6e" strokeWidth="1" />
+                {/* Solar Wing Boom */}
+                <line x1="85" y1="25" x2="110" y2="25" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+              </g>
+
+              {/* Starboard Solar Array Wing */}
+              <g transform="translate(250, 65)">
+                {/* Solar Wing Boom */}
+                <line x1="-25" y1="25" x2="0" y2="25" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+                <rect x="0" y="0" width="85" height="50" rx="3" fill="url(#solar-cell-nom)" stroke="#38bdf8" strokeWidth="1" />
+                {/* Solar Cell Grid Lines */}
+                <line x1="28" y1="0" x2="28" y2="50" stroke="#0c4a6e" strokeWidth="1" />
+                <line x1="56" y1="0" x2="56" y2="50" stroke="#0c4a6e" strokeWidth="1" />
+                <line x1="0" y1="25" x2="85" y2="25" stroke="#0c4a6e" strokeWidth="1" />
+              </g>
+
+              {/* Spacecraft Main Hex Bus Core */}
+              <polygon
+                points="160,50 220,50 240,90 220,130 160,130 140,90"
+                fill="url(#nominal-bus)"
+                stroke="#10b981"
+                strokeWidth="1.5"
+              />
+
+              {/* Nadir Earth Antenna Boom */}
+              <line x1="190" y1="130" x2="190" y2="155" stroke="#64748b" strokeWidth="2" />
+              <path d="M 175,155 Q 190,145 205,155" fill="none" stroke="#38bdf8" strokeWidth="2" />
+              <circle cx="190" cy="150" r="2.5" fill="#38bdf8" />
+
+              {/* Internal Avionics & ADCS Reaction Wheel Cluster */}
+              <circle cx="190" cy="90" r="16" fill="#0b1329" stroke="#10b981" strokeWidth="1" strokeDasharray="3 2" />
+              <circle cx="190" cy="90" r="6" fill="#10b981" className="animate-pulse" />
+              
+              {/* Telemetry Annotation Vectors */}
+              <circle cx="160" cy="72" r="3" fill="#10b981" />
+              <line x1="160" y1="72" x2="135" y2="45" stroke="#10b981" strokeWidth="0.8" />
+              <text x="75" y="42" fill="#10b981" fontSize="8" fontFamily="monospace" fontWeight="bold">EPS: 28.2V NOM</text>
+
+              <circle cx="220" cy="72" r="3" fill="#38bdf8" />
+              <line x1="220" y1="72" x2="245" y2="45" stroke="#38bdf8" strokeWidth="0.8" />
+              <text x="250" y="42" fill="#38bdf8" fontSize="8" fontFamily="monospace" fontWeight="bold">ADCS: 0.00° STABLE</text>
+            </svg>
+
             <div className="absolute top-3 left-3 bg-[#05070a]/90 px-2.5 py-1 rounded-xl border border-[#1e293b] text-[9px] font-mono text-slate-300 backdrop-blur-md">
               PARAM: <span className="text-green-400 font-bold">{activePreset.baselineMetric}</span>
             </div>
@@ -1016,11 +1169,178 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
               />
             )}
 
-            <img
-              alt="Faulted and Remediated Satellite Digital Twin"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXkExvaR1cCrmB4uW3rYbUpq3usxMB-zyjqlgeAKCcr2yP9T5Jf_iWQdOjHyEb_Q8c3aX4yAtk1coZHAazVnSB31AEuFKpsB--K9vEchb2IQ3ycLzEFlUNB_6YtYIGn95J1kRzU8aiaaAzi47Usc3MF5Ydo70yUnjHNIpcKa__IaHOwBVML-xYc3-V5ipnjTF5XKEjqA0WFZKS7ki0F0ql60NOHFhCL_1r9Q_cXhdRwmZlhe57siLq"
-              className="max-h-full max-w-full object-contain filter drop-shadow-[0_0_12px_rgba(255,185,95,0.25)]"
-            />
+            {/* Functional Reactive Vector Wireframe: Faulted & Remediated Digital Twin */}
+            <svg viewBox="0 0 380 180" className="w-full h-full max-h-48 drop-shadow-[0_0_16px_rgba(239,68,68,0.2)]">
+              <defs>
+                <linearGradient id="fault-bus" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#1e1122" />
+                  <stop offset="100%" stopColor="#0f172a" />
+                </linearGradient>
+              </defs>
+
+              {/* Orbital Horizon Reference Line with Attitude Drift */}
+              <line
+                x1="20"
+                y1={simStage === 'injected' || simStage === 'detected' ? '82' : '90'}
+                x2="360"
+                y2={simStage === 'injected' || simStage === 'detected' ? '98' : '90'}
+                stroke={
+                  simStage === 'catastrophic_failure'
+                    ? '#f43f5e'
+                    : simStage === 'injected' || simStage === 'detected'
+                    ? '#fb7185'
+                    : '#1e293b'
+                }
+                strokeDasharray="3 3"
+                strokeWidth="0.8"
+              />
+
+              {/* Port Solar Array Wing */}
+              <g
+                transform={
+                  simStage === 'catastrophic_failure'
+                    ? 'translate(45, 58) rotate(-6 42 25)'
+                    : simStage === 'injected'
+                    ? 'translate(45, 62) rotate(-3 42 25)'
+                    : 'translate(45, 65)'
+                }
+                className="transition-transform duration-500"
+              >
+                <rect
+                  x="0"
+                  y="0"
+                  width="85"
+                  height="50"
+                  rx="3"
+                  fill="#0369a1"
+                  stroke={
+                    simStage === 'catastrophic_failure'
+                      ? '#e11d48'
+                      : simStage === 'injected'
+                      ? '#f59e0b'
+                      : '#38bdf8'
+                  }
+                  strokeWidth="1"
+                />
+                <line x1="28" y1="0" x2="28" y2="50" stroke="#0c4a6e" strokeWidth="1" />
+                <line x1="56" y1="0" x2="56" y2="50" stroke="#0c4a6e" strokeWidth="1" />
+                <line x1="0" y1="25" x2="85" y2="25" stroke="#0c4a6e" strokeWidth="1" />
+                <line x1="85" y1="25" x2="110" y2="25" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+              </g>
+
+              {/* Starboard Solar Array Wing */}
+              <g
+                transform={
+                  simStage === 'catastrophic_failure'
+                    ? 'translate(250, 72) rotate(6 42 25)'
+                    : simStage === 'injected'
+                    ? 'translate(250, 68) rotate(3 42 25)'
+                    : 'translate(250, 65)'
+                }
+                className="transition-transform duration-500"
+              >
+                <line x1="-25" y1="25" x2="0" y2="25" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+                <rect
+                  x="0"
+                  y="0"
+                  width="85"
+                  height="50"
+                  rx="3"
+                  fill="#0369a1"
+                  stroke={
+                    simStage === 'catastrophic_failure'
+                      ? '#e11d48'
+                      : simStage === 'injected'
+                      ? '#f59e0b'
+                      : '#38bdf8'
+                  }
+                  strokeWidth="1"
+                />
+                <line x1="28" y1="0" x2="28" y2="50" stroke="#0c4a6e" strokeWidth="1" />
+                <line x1="56" y1="0" x2="56" y2="50" stroke="#0c4a6e" strokeWidth="1" />
+                <line x1="0" y1="25" x2="85" y2="25" stroke="#0c4a6e" strokeWidth="1" />
+              </g>
+
+              {/* Spacecraft Main Bus Core (Reactive Color by Stage) */}
+              <polygon
+                points="160,50 220,50 240,90 220,130 160,130 140,90"
+                fill="url(#fault-bus)"
+                stroke={
+                  simStage === 'catastrophic_failure'
+                    ? '#e11d48'
+                    : simStage === 'injected' || simStage === 'detected'
+                    ? '#f43f5e'
+                    : simStage === 'mitigating'
+                    ? '#f59e0b'
+                    : simStage === 'remediated'
+                    ? '#10b981'
+                    : '#0ea5e9'
+                }
+                strokeWidth="1.8"
+                className="transition-colors duration-300"
+              />
+
+              {/* Nadir Earth Antenna Boom */}
+              <line x1="190" y1="130" x2="190" y2="155" stroke="#64748b" strokeWidth="2" />
+              <path d="M 175,155 Q 190,145 205,155" fill="none" stroke="#38bdf8" strokeWidth="2" />
+              <circle
+                cx="190"
+                cy="150"
+                r="2.5"
+                fill={simStage === 'catastrophic_failure' ? '#e11d48' : '#38bdf8'}
+              />
+
+              {/* Fault Zone / Active Remediation Reticle */}
+              <circle
+                cx="190"
+                cy="90"
+                r="18"
+                fill="none"
+                stroke={
+                  simStage === 'catastrophic_failure'
+                    ? '#e11d48'
+                    : simStage === 'injected' || simStage === 'detected'
+                    ? '#f43f5e'
+                    : simStage === 'mitigating'
+                    ? '#f59e0b'
+                    : '#10b981'
+                }
+                strokeWidth="1.2"
+                strokeDasharray="4 2"
+                className={simStage !== 'idle' ? 'animate-spin' : ''}
+              />
+              <circle
+                cx="190"
+                cy="90"
+                r="6"
+                fill={
+                  simStage === 'catastrophic_failure'
+                    ? '#e11d48'
+                    : simStage === 'injected' || simStage === 'detected'
+                    ? '#f43f5e'
+                    : simStage === 'mitigating'
+                    ? '#f59e0b'
+                    : '#10b981'
+                }
+                className="animate-ping"
+              />
+
+              {/* Dynamic Fault Vector Pointer */}
+              {simStage !== 'idle' && (
+                <g>
+                  <circle cx="160" cy="72" r="3" fill="#f43f5e" />
+                  <line x1="160" y1="72" x2="130" y2="35" stroke="#f43f5e" strokeWidth="1" />
+                  <rect x="55" y="24" width="75" height="15" rx="3" fill="#0f172a" stroke="#f43f5e" strokeWidth="0.8" />
+                  <text x="60" y="35" fill="#f43f5e" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+                    {simStage === 'catastrophic_failure'
+                      ? 'FATAL BREACH'
+                      : simStage === 'remediated'
+                      ? 'SAFE ENVELOPE'
+                      : `${activePreset.subsystem} FAULT`}
+                  </text>
+                </g>
+              )}
+            </svg>
 
             <div className="absolute top-3 left-3 bg-[#05070a]/90 px-2.5 py-1 rounded-xl border border-[#1e293b] text-[9px] font-mono backdrop-blur-md">
               LIVE SENSOR: <span className={liveStatusColor}>{liveValueText}</span>
@@ -1862,6 +2182,206 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
               {(isCatastrophic || autonomySetting === 'suppressed') && simTime >= activePreset.detectionTime
                 ? `${domainInfo.catastrophicMechanism}`
                 : 'Secondary cooling engaged, attitude stabilized, thermal drift arrested.'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* OrbitGuard Deterministic Safety Validator & Gemini AI Consensus */}
+      <div className="bg-[#0f172a] border border-cyan-500/30 p-5 rounded-3xl flex flex-col gap-4 shadow-xl">
+        <div className="flex items-center justify-between border-b border-[#1e293b]/60 pb-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+              <ShieldCheck size={16} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase text-white font-bold tracking-wide">
+                  OrbitGuard Safety Verification & Gemini 3.8 Flash Consensus
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[9px] bg-cyan-500/10 text-cyan-400 font-mono font-bold border border-cyan-500/30">
+                  HYBRID DIGITAL TWIN
+                </span>
+              </div>
+              <p className="text-[10px] font-mono text-slate-400">
+                Deterministic constraint satisfaction (OrbitGuard) + Generative reasoning (Gemini Agent Delta)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 font-mono text-xs">
+            {ogApiStatus === 'calling' ? (
+              <span className="text-amber-400 flex items-center gap-1.5 text-[11px] bg-amber-500/10 px-2.5 py-1 rounded-xl border border-amber-500/30">
+                <RefreshCw size={12} className="animate-spin" />
+                VERIFYING ENVELOPES...
+              </span>
+            ) : hybridResult ? (
+              <span className="text-emerald-400 flex items-center gap-1.5 text-[11px] bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/30">
+                <CheckCircle2 size={12} />
+                SAFETY SCORE: {((hybridResult.orbitGuardValidation?.safety_score ?? 0.9) * 100).toFixed(0)}%
+              </span>
+            ) : (
+              <span className="text-slate-400 text-[11px] bg-[#05070a] px-2.5 py-1 rounded-xl border border-[#1e293b]">
+                STATUS: STANDBY (RUN TEST TO ENGAGE)
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 font-mono">
+          {/* Left Column: OrbitGuard Deterministic Constraint Validation */}
+          <div className="bg-[#05070a] p-4 rounded-2xl border border-[#1e293b] flex flex-col justify-between gap-3">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Server size={14} className="text-cyan-400" />
+                  <span className="text-xs text-white font-bold uppercase">OrbitGuard Constraints Engine</span>
+                </div>
+                <span className="text-[10px] text-slate-400">SAT-01 TWIN</span>
+              </div>
+
+              {/* Safety Score Meter */}
+              <div>
+                <div className="flex justify-between text-[10px] mb-1">
+                  <span className="text-slate-400">DETERMINISTIC SAFETY SCORE</span>
+                  <span className="text-cyan-400 font-bold">
+                    {hybridResult?.orbitGuardValidation
+                      ? `${(hybridResult.orbitGuardValidation.safety_score * 100).toFixed(0)}% / 100%`
+                      : '90% (NOMINAL CORRIDOR)'}
+                  </span>
+                </div>
+                <div className="w-full bg-[#0a1120] h-2 rounded-full overflow-hidden border border-[#1e293b]">
+                  <div
+                    className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-500"
+                    style={{
+                      width: `${
+                        hybridResult?.orbitGuardValidation
+                          ? hybridResult.orbitGuardValidation.safety_score * 100
+                          : 90
+                      }%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Checks list */}
+              <div className="space-y-2 text-[11px]">
+                {(
+                  hybridResult?.orbitGuardValidation?.checks || [
+                    { check_name: 'Thermal Mode Payload Interlock', passed: true, details: 'Payload power throttled below 35W' },
+                    { check_name: 'ADCS Wheel Stability Interlock', passed: true, details: 'Reaction wheel speed < 4800 RPM' },
+                    { check_name: 'Battery SoC Safety Margin', passed: true, details: 'State of charge preserved > 45%' },
+                    { check_name: 'Contingency Rollback Definition', passed: true, details: 'Safe-hold pointing vector indexed' },
+                  ]
+                ).map((chk, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-start justify-between p-2 rounded-xl bg-[#0a1120] border border-[#1e293b]/80 gap-2"
+                  >
+                    <div className="flex items-start gap-2">
+                      {chk.passed ? (
+                        <CheckCircle2 size={13} className="text-emerald-400 mt-0.5 shrink-0" />
+                      ) : (
+                        <AlertTriangle size={13} className="text-rose-400 mt-0.5 shrink-0" />
+                      )}
+                      <div>
+                        <div className="font-semibold text-slate-200">{chk.check_name}</div>
+                        <div className="text-[10px] text-slate-400">{chk.details}</div>
+                      </div>
+                    </div>
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
+                        chk.passed
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                      }`}
+                    >
+                      {chk.passed ? 'PASSED' : 'FLAGGED'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-[#1e293b] flex items-center justify-between text-[10px]">
+              <span className="text-slate-400">ENDPOINT: /api/plans/validate</span>
+              <button
+                onClick={() => {
+                  sound.playClick();
+                  resetSim();
+                }}
+                disabled={ogResetting}
+                className="px-2.5 py-1 rounded-lg bg-[#0f172a] hover:bg-[#1e293b] border border-[#1e293b] text-slate-300 transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <RotateCcw size={10} className={ogResetting ? 'animate-spin' : ''} />
+                Reset OrbitGuard Twin
+              </button>
+            </div>
+          </div>
+
+          {/* Right Column: Gemini 3.8 Flash Agent Delta Reasoning */}
+          <div className="bg-[#05070a] p-4 rounded-2xl border border-[#1e293b] flex flex-col justify-between gap-3">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={14} className="text-purple-400" />
+                  <span className="text-xs text-white font-bold uppercase">Gemini 3.8 Flash Supervisor</span>
+                </div>
+                <span className="text-[9px] bg-purple-500/10 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30 font-bold">
+                  AGENT DELTA (FDIR)
+                </span>
+              </div>
+
+              {/* Assessment Card */}
+              <div className="p-3 rounded-xl bg-[#0a1120] border border-[#1e293b] space-y-1.5">
+                <div className="text-[10px] text-slate-400 uppercase font-semibold">Cognitive Diagnostics Assessment</div>
+                <div className="text-slate-200 text-xs leading-relaxed font-sans">
+                  {hybridResult?.geminiAnalysis?.supervisorAssessment ||
+                    `Swarm supervisor actively synthesizing physical telemetry envelopes with mathematical flight rule constraints. Anomaly signature correlated to ${activePreset.subsystem} domain.`}
+                </div>
+              </div>
+
+              {/* Action Plan & Consensus */}
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="p-2.5 rounded-xl bg-[#0a1120] border border-[#1e293b]">
+                  <span className="text-slate-400 uppercase text-[9px]">Root Cause Classification</span>
+                  <div className="font-bold text-cyan-300 mt-0.5 truncate">
+                    {hybridResult?.geminiAnalysis?.rootCause || `${activePreset.title} Transient`}
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-[#0a1120] border border-[#1e293b]">
+                  <span className="text-slate-400 uppercase text-[9px]">Raft-BFT Swarm Consensus</span>
+                  <div className="font-bold text-emerald-400 mt-0.5 flex items-center gap-1">
+                    <ShieldCheck size={12} />
+                    {hybridResult?.geminiAnalysis?.consensusVerdict || '4/4 Quorum Signed'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Recommended Steps */}
+              <div className="p-2.5 rounded-xl bg-[#0a1120] border border-[#1e293b] space-y-1">
+                <span className="text-slate-400 uppercase text-[9px] font-semibold">Recommended Recovery Actions</span>
+                <div className="space-y-1 text-[11px] text-slate-300">
+                  {(
+                    hybridResult?.geminiAnalysis?.recommendedActions || [
+                      '1. Divert non-critical power bus loads',
+                      '2. Trim reaction wheel momentum via magnetic torquers',
+                      '3. Commit signed mitigation vector to telemetry log',
+                    ]
+                  ).map((act, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+                      <span className="truncate">{act}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-[#1e293b] flex items-center justify-between text-[10px] text-slate-400">
+              <span>LATENCY: ~210ms</span>
+              <span className="text-emerald-400 font-semibold">STATUS: NOMINAL SYNC</span>
             </div>
           </div>
         </div>

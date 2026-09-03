@@ -503,12 +503,46 @@ export const AgentMeshScreen: React.FC<AgentMeshScreenProps> = ({
               </span>
             </div>
 
-            <div className="p-4 flex flex-col sm:flex-row items-center gap-4">
-              <img
-                alt="Rad-Hard Space-Grade Neural Silicon"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDYubI-u2p4l-hXv5RGc1mLz4ooArlzIgO3qjRVTJMcFwGgaeSdZY5wLpXznn6Tlr3E3fsAFK5NEKAB_6xcA-7HP9eXEzXqgABYV7iFMFnrc-i-SOJaM2wLVG149F-bASAjgBGjA-L069YYTg6JBI6JiOZdfge31zI5qiyfHeNigTjOn_kaR2RXeQE9lTBT_LvndhVfC6xgwBU9dK890GughHkM4I6DmGKblHIFhBPrpBz6FCKQd_h6"
-                className="w-28 h-28 object-contain rounded-2xl border border-[#1e293b] bg-[#05070a] p-1.5 shadow-md"
-              />
+            <div className="p-4 flex flex-col sm:flex-row items-stretch gap-4">
+              {/* Functional Rad-Hard Silicon Core Topology Diagram */}
+              <div className="w-full sm:w-40 bg-[#05070a] rounded-2xl border border-cyan-500/30 p-3 flex flex-col justify-between shadow-inner">
+                <div className="flex items-center justify-between text-[9px] font-mono text-cyan-400 border-b border-[#1e293b] pb-1.5 mb-2">
+                  <span className="font-bold flex items-center gap-1">
+                    <Cpu size={11} className="text-cyan-400" />
+                    VPX-774 QUAD
+                  </span>
+                  <span className="text-[8px] bg-emerald-500/20 text-emerald-400 px-1 py-0.2 rounded border border-emerald-500/30">RAD-HARD</span>
+                </div>
+
+                {/* 4 Active Core Processing Cores */}
+                <div className="grid grid-cols-2 gap-1.5 font-mono text-[9px]">
+                  <div className="p-1.5 rounded-lg bg-[#0a1120] border border-cyan-500/20 flex flex-col items-center text-center">
+                    <span className="text-[8px] text-slate-400">CORE α</span>
+                    <span className="text-cyan-300 font-bold">EPS</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mt-0.5" />
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-[#0a1120] border border-cyan-500/20 flex flex-col items-center text-center">
+                    <span className="text-[8px] text-slate-400">CORE β</span>
+                    <span className="text-cyan-300 font-bold">ADCS</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mt-0.5" />
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-[#0a1120] border border-cyan-500/20 flex flex-col items-center text-center">
+                    <span className="text-[8px] text-slate-400">CORE γ</span>
+                    <span className="text-cyan-300 font-bold">THERM</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mt-0.5" />
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-[#0a1120] border border-purple-500/30 flex flex-col items-center text-center bg-purple-500/5">
+                    <span className="text-[8px] text-purple-300">CORE δ</span>
+                    <span className="text-purple-300 font-bold">FDIR</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse mt-0.5" />
+                  </div>
+                </div>
+
+                <div className="mt-2 pt-1.5 border-t border-[#1e293b] flex items-center justify-between text-[8px] font-mono text-slate-400">
+                  <span>TID: 100 kRad</span>
+                  <span className="text-emerald-400 font-semibold">T: 34.2°C</span>
+                </div>
+              </div>
 
               <div className="flex-1 w-full grid grid-cols-2 gap-2 text-xs font-mono">
                 <div className="bg-[#05070a] p-3 rounded-xl border border-[#1e293b]">

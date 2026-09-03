@@ -92,3 +92,100 @@ export interface ManualPulseEvent {
   angularRateDeg: number;
   fuelGrams: number;
 }
+
+// ============================================================================
+// OrbitGuard External API & Hybrid AI Types
+// ============================================================================
+
+export interface OrbitGuardHealth {
+  status: string;
+  timestamp: string;
+  version: string;
+  services: {
+    api: string;
+    database: string;
+    ai_provider: string;
+  };
+  latencyMs?: number;
+  connected: boolean;
+}
+
+export interface OrbitGuardValidationCheck {
+  check_name: string;
+  passed: boolean;
+  message: string;
+}
+
+export interface OrbitGuardValidationResult {
+  validation_id: string;
+  plan_id: string;
+  is_valid: boolean;
+  is_safe: boolean;
+  violations: string[];
+  warnings: string[];
+  checks: OrbitGuardValidationCheck[];
+  safety_score: number;
+  validated_at: string;
+}
+
+export interface OrbitGuardRecoveryStep {
+  step_number: number;
+  action: string;
+  subsystem: string;
+  expected_outcome: string;
+  rollback_action?: string | null;
+}
+
+export interface OrbitGuardRecoveryPlan {
+  plan_id: string;
+  title?: string | null;
+  diagnosis_id: string;
+  satellite_id: string;
+  actions: string[];
+  preconditions: string[];
+  expected_effects: string[];
+  steps: OrbitGuardRecoveryStep[];
+  risk_level?: 'low' | 'medium' | 'high';
+  risk_score?: number;
+  rollback_plan?: string | null;
+  estimated_duration_seconds?: number;
+  requires_ground_approval?: boolean;
+  validation_result?: OrbitGuardValidationResult | null;
+  created_at: string;
+}
+
+export interface OrbitGuardTelemetryMetric {
+  value: number;
+  unit: string;
+  subsystem: string;
+}
+
+export interface OrbitGuardTelemetryReading {
+  satellite_id: string;
+  timestamp: string;
+  metrics: {
+    battery_temperature?: OrbitGuardTelemetryMetric;
+    battery_voltage?: OrbitGuardTelemetryMetric;
+    solar_power?: OrbitGuardTelemetryMetric;
+    wheel_speed?: OrbitGuardTelemetryMetric;
+    attitude_error?: OrbitGuardTelemetryMetric;
+    comm_snr?: OrbitGuardTelemetryMetric;
+    [key: string]: OrbitGuardTelemetryMetric | undefined;
+  };
+}
+
+export interface HybridDiagnosisResult {
+  source: 'orbitguard_hybrid' | 'gemini_supervisor' | 'onboard_autonomous';
+  timestamp: string;
+  orbitGuardValidation?: OrbitGuardValidationResult | null;
+  geminiAnalysis?: {
+    supervisorAssessment: string;
+    recommendedActions: string[];
+    riskFactor: number;
+    subsystemImpacts: { subsystem: string; impact: string; severity: 'low' | 'medium' | 'high' | 'critical' }[];
+    consensusVerdict: string;
+  };
+  incidentId?: string;
+  recoveryPlan?: OrbitGuardRecoveryPlan | null;
+}
+
