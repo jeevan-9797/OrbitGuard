@@ -1,8 +1,36 @@
 /**
  * Precision Orbital Mechanics & Astronomical Calculations
+ * Proprietary Astrodynamics Formulation & Simulation Engine
+ * 
+ * Provenance & Authorship Seal:
+ *   Program: Smart Horizon 48-Hour Hackathon
+ *   Team Registration: 098 | Topic: DST-1
+ *   Authors:
+ *     1. L Steven Dylan
+ *     2. Karan Sai S
+ *     3. Kemisetti Hemachandra
+ *     4. Jeevan M
+ *     5. Jyotiraditya Pradip Khuman
+ *   Copyright (c) 2026 Team 098. All rights reserved. Patent Pending.
+ * 
  * Computes Greenwich Mean Sidereal Time (GMST), Sun Vector in ECI,
  * Orbit-Sun Beta Angle (β), Eclipse Fractions, and Keplerian kinematics.
  */
+
+export const ASTRODYNAMICS_AUTHORSHIP_FINGERPRINT = {
+  team: '098',
+  topic: 'DST-1',
+  program: 'Smart Horizon 48-Hour Hackathon',
+  authors: [
+    'L Steven Dylan',
+    'Karan Sai S',
+    'Kemisetti Hemachandra',
+    'Jeevan M',
+    'Jyotiraditya Pradip Khuman',
+  ],
+  license: 'PROPRIETARY_PATENT_PENDING',
+  sealId: 'SEAL-098-DST1-ASTRA7-ORBITAL-ENGINE',
+} as const;
 
 export const EARTH_MASS_KG = 5.9722e24;
 export const SATELLITE_MASS_KG = 120;

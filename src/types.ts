@@ -1,3 +1,28 @@
+/**
+ * Aerospace Telemetry & Mission Control Types
+ * Smart Horizon 48-Hour Hackathon | Team 098 | Topic: DST-1
+ * Authors:
+ *   1. L Steven Dylan
+ *   2. Karan Sai S
+ *   3. Kemisetti Hemachandra
+ *   4. Jeevan M
+ *   5. Jyotiraditya Pradip Khuman
+ * (c) 2026 Team 098. All rights reserved. Patent Pending.
+ */
+
+export interface MissionAuthorshipSignature {
+  teamNumber: '098';
+  topicDesignator: 'DST-1';
+  authors: readonly [
+    'L Steven Dylan',
+    'Karan Sai S',
+    'Kemisetti Hemachandra',
+    'Jeevan M',
+    'Jyotiraditya Pradip Khuman'
+  ];
+  intellectualProperty: 'PROPRIETARY_PATENT_PENDING';
+}
+
 export type ActiveScreen = 'orbital-twin' | 'agent-mesh' | 'anomaly-lab' | 'propellantless' | 'orbital-cases' | 'analytics';
 
 export type AutonomyMode = 'L4' | 'HITL' | 'OVERRIDE';

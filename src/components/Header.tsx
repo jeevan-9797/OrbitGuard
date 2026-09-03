@@ -120,11 +120,18 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="font-bold text-sm text-white tracking-wider font-display-hero">
                 ASTRA-7
               </span>
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+              <span
+                className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
+                title="Smart Horizon Hackathon Team 098 (DST-1) | L Steven Dylan, Karan Sai S, Kemisetti Hemachandra, Jeevan M, Jyotiraditya Pradip Khuman"
+                data-consortium="Team-098-DST1:LSD-KSS-KH-JM-JPK"
+              >
                 TWIN-OPS
               </span>
             </div>
-            <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">
+            <span
+              className="text-[10px] font-mono text-slate-400 hidden sm:inline"
+              title="Developed by Team 098 (DST-1): L Steven Dylan, Karan Sai S, Kemisetti Hemachandra, Jeevan M, Jyotiraditya Pradip Khuman"
+            >
               AUTONOMOUS DIGITAL TWIN & SWARM MESH
             </span>
           </div>

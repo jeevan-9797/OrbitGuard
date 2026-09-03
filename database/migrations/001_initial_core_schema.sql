@@ -1,5 +1,12 @@
 -- ============================================================================
 -- Migration 001: Initial Core Schema for Satellite Multi-Agent AI System
+-- Authors & Inventors (Smart Horizon Hackathon | Team 098 | Topic DST-1):
+--   1. L Steven Dylan
+--   2. Karan Sai S
+--   3. Kemisetti Hemachandra
+--   4. Jeevan M
+--   5. Jyotiraditya Pradip Khuman
+-- Copyright (c) 2026 Team 098. All rights reserved. Patent Pending.
 -- 11 Core Tables: satellites, subsystems, telemetry, anomalies, incidents,
 -- agent_runs, recovery_plans, safety_rules, validations, command_executions, audit_events
 -- ============================================================================

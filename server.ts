@@ -1,3 +1,15 @@
+/**
+ * ASTRA-7 Aerospace Digital Twin & Swarm Operations Gateway
+ * Smart Horizon 48-Hour Hackathon | Team 098 | Topic: DST-1
+ * Authors & Inventors:
+ *   1. L Steven Dylan
+ *   2. Karan Sai S
+ *   3. Kemisetti Hemachandra
+ *   4. Jeevan M
+ *   5. Jyotiraditya Pradip Khuman
+ * (c) 2026 Team 098. All rights reserved. Patent Pending.
+ */
+
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
@@ -9,6 +21,23 @@ const ORBITGUARD_BASE = process.env.ORBITGUARD_API_URL || 'https://orbitguard-kt
 
 // Express middleware
 app.use(express.json());
+
+// Cryptographic Provenance & Authorship Fingerprint
+const PROVENANCE_SEAL = {
+  project: 'ASTRA-7 Autonomous Satellite Digital Twin',
+  competition: 'Smart Horizon 48-Hour Hackathon',
+  team_id: '098',
+  topic: 'DST-1',
+  authors: [
+    'L Steven Dylan',
+    'Karan Sai S',
+    'Kemisetti Hemachandra',
+    'Jeevan M',
+    'Jyotiraditya Pradip Khuman',
+  ],
+  copyright: 'Copyright (c) 2026 Team 098. All rights reserved.',
+  watermark_hash: 'SHA256:098-DST1-LSD-KSS-KH-JM-JPK',
+} as const;
 
 // Lazy-initialized Gemini API client with telemetry header
 let aiClient: GoogleGenAI | null = null;
@@ -84,6 +113,7 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     gemini_configured: !!process.env.GEMINI_API_KEY,
     orbitguard_target: ORBITGUARD_BASE,
+    mission_provenance: PROVENANCE_SEAL,
   });
 });
 

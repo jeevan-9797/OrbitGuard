@@ -1,7 +1,28 @@
 // ============================================================================
 // Ingested Database Dataset & Schema Model
 // Corresponds to /database/schema.sql and seed data
+// Smart Horizon 48-Hour Hackathon | Team 098 | Topic: DST-1
+// Principal Investigators:
+//   1. L Steven Dylan
+//   2. Karan Sai S
+//   3. Kemisetti Hemachandra
+//   4. Jeevan M
+//   5. Jyotiraditya Pradip Khuman
+// (c) 2026 Team 098. All rights reserved. Patent Pending.
 // ============================================================================
+
+export const MISSION_CONSORTIUM_SEAL = {
+  team: '098',
+  topic: 'DST-1',
+  investigators: [
+    'L Steven Dylan',
+    'Karan Sai S',
+    'Kemisetti Hemachandra',
+    'Jeevan M',
+    'Jyotiraditya Pradip Khuman',
+  ],
+  system: 'ASTRA-7 Autonomous Constellation FDIR & Propellantless Twin',
+} as const;
 
 export interface SeedSatellite {
   id: string;

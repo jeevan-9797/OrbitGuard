@@ -1,5 +1,13 @@
 -- ============================================================================
 -- Satellite Multi-Agent AI System - Complete Consolidated Schema
+-- Smart Horizon 48-Hour Hackathon | Team 098 | Topic: DST-1
+-- Authors & Inventors:
+--   1. L Steven Dylan
+--   2. Karan Sai S
+--   3. Kemisetti Hemachandra
+--   4. Jeevan M
+--   5. Jyotiraditya Pradip Khuman
+-- Copyright (c) 2026 Team 098. All rights reserved. Patent Pending.
 -- Core Tables (11) + Knowledge/Config Tables (6) = 17 Tables Total
 -- ============================================================================
 

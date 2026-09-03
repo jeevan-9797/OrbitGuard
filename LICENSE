@@ -1,15 +1,28 @@
 PROPRIETARY AND CONFIDENTIAL
 PATENT PENDING / ALL RIGHTS RESERVED
 
-Copyright (c) 2026 Team 098. All rights reserved.
+PROJECT: ASTRA-7 Autonomous Satellite Digital Twin & Multi-Agent Swarm Operations Console
+HACKATHON: Smart Horizon 48-Hour Hackathon
+REGISTRATION / TEAM NUMBER: 098
+TOPIC DESIGNATION: DST-1
+
+INVENTORS & AUTHORS:
+1. L Steven Dylan
+2. Karan Sai S
+3. Kemisetti Hemachandra
+4. Jeevan M
+5. Jyotiraditya Pradip Khuman
+
+Copyright (c) 2026 Team 098 (L Steven Dylan, Karan Sai S, Kemisetti Hemachandra, Jeevan M, Jyotiraditya Pradip Khuman).
+All rights reserved.
 
 This software, including its architecture, source code, algorithms, orbital mechanics
-control models, digital twin simulations, and safety interlock state machines, contains
-confidential, proprietary, and trade secret information.
+control models, digital twin simulations, state machines, and safety interlock specifications,
+contains confidential, proprietary, and trade secret information.
 
 NO LICENSE, EXPRESS OR IMPLIED, BY ESTOPPEL OR OTHERWISE, TO ANY INTELLECTUAL PROPERTY
 RIGHTS OR PATENT RIGHTS IS GRANTED BY THIS DOCUMENT OR IN CONNECTION WITH THE ACCESS TO,
-VIEWING OF, OR HOSTING OF THIS CODE.
+VIEWING OF, OR HOSTING OF THIS REPOSITORY.
 
 Unauthorized copying, distribution, sublicensing, modification, reverse engineering,
 public dissemination, or commercial exploitation of this software and associated materials,

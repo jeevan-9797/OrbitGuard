@@ -211,6 +211,16 @@ npm run lint
 
 **Proprietary and Confidential — Patent Pending / All Rights Reserved.**
 
-Copyright © 2026 Team 098. All rights reserved.
+- **Competition / Program**: Smart Horizon 48-Hour Hackathon
+- **Team Registration Number**: 098
+- **Topic Designation**: DST-1
+- **Inventors & Principal Authors**:
+  1. **L Steven Dylan**
+  2. **Karan Sai S**
+  3. **Kemisetti Hemachandra**
+  4. **Jeevan M**
+  5. **Jyotiraditya Pradip Khuman**
+
+Copyright © 2026 Team 098 (L Steven Dylan, Karan Sai S, Kemisetti Hemachandra, Jeevan M, Jyotiraditya Pradip Khuman). All rights reserved.
 
 No license, express or implied, is granted for public redistribution, modification, commercial use, or reverse engineering of the proprietary algorithms, orbital mechanics control models, digital twin architectures, or safety interlock state machines.

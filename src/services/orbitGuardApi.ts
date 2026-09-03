@@ -1,3 +1,15 @@
+/**
+ * OrbitGuard Autonomous Satellite API & Hybrid Gemini AI Service Client
+ * Smart Horizon 48-Hour Hackathon | Team 098 | Topic: DST-1
+ * Authors:
+ *   1. L Steven Dylan
+ *   2. Karan Sai S
+ *   3. Kemisetti Hemachandra
+ *   4. Jeevan M
+ *   5. Jyotiraditya Pradip Khuman
+ * (c) 2026 Team 098. All rights reserved. Patent Pending.
+ */
+
 import {
   OrbitGuardHealth,
   OrbitGuardValidationResult,
@@ -12,6 +24,7 @@ import {
 class OrbitGuardApiService {
   private baseUrl = '/api/orbitguard';
   private aiUrl = '/api/ai';
+  public readonly authorshipFingerprint = 'TEAM-098-DST1:LSD-KSS-KH-JM-JPK' as const;
 
   /**
    * Health check of OrbitGuard backend + latency measurement
