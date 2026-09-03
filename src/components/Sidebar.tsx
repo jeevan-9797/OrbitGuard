@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActiveScreen } from '../types';
 import { sound } from '../utils/audio';
+import { getISTTimeString } from '../utils/time';
 import {
   Orbit,
   Cpu,
@@ -83,10 +84,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
-  const now = new Date();
-  const utcTime = `${String(now.getUTCHours()).padStart(2, '0')}:${String(
-    now.getUTCMinutes()
-  ).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')} UTC`;
+  const [istTime, setIstTime] = useState<string>(() => getISTTimeString());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIstTime(getISTTimeString());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <>
@@ -145,13 +150,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
-          {/* Mission UTC Clock */}
+          {/* Mission IST Clock */}
           <div className="bg-[#05070a] p-3 rounded-2xl border border-[#1e293b] flex items-center justify-between font-mono text-xs shadow-inner">
             <div className="flex items-center gap-2 text-slate-400">
               <Clock size={14} className="text-cyan-400" />
-              <span className="text-[10px] uppercase">MISSION CLOCK</span>
+              <span className="text-[10px] uppercase font-bold text-slate-300">MISSION CLOCK (IST)</span>
             </div>
-            <span className="text-slate-200 font-bold tracking-wider">{utcTime}</span>
+            <span className="text-cyan-400 font-bold tracking-wider">{istTime}</span>
           </div>
 
           {/* Navigation Items */}

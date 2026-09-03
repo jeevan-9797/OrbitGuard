@@ -46,7 +46,7 @@ export const INITIAL_AGENTS: AgentStatus[] = [
 export const INITIAL_LEDGER_ITEMS: InterventionLedgerItem[] = [
   {
     id: 'act-01',
-    timestamp: '14:02:11 UTC',
+    timestamp: '19:32:11 IST',
     leadAgent: 'Agent Beta::AOCS',
     actionExecuted: 'Reaction Wheel RW-2 Desaturation Torque (+0.04 N·m)',
     resolutionTime: '1.8 sec',
@@ -55,7 +55,7 @@ export const INITIAL_LEDGER_ITEMS: InterventionLedgerItem[] = [
   },
   {
     id: 'act-02',
-    timestamp: '13:48:02 UTC',
+    timestamp: '19:18:02 IST',
     leadAgent: 'Agent Alpha::Thermal',
     actionExecuted: 'Radiator Louver Slew +14.2° Ahead of Eclipse Ingress',
     resolutionTime: '4.2 sec',
@@ -64,7 +64,7 @@ export const INITIAL_LEDGER_ITEMS: InterventionLedgerItem[] = [
   },
   {
     id: 'act-03',
-    timestamp: '12:15:33 UTC',
+    timestamp: '17:45:33 IST',
     leadAgent: 'Agent Gamma::Prop',
     actionExecuted: 'Micro-Impulse RCS +X Burn (80ms) for Drag Compensation',
     resolutionTime: '2.1 sec',
@@ -73,7 +73,7 @@ export const INITIAL_LEDGER_ITEMS: InterventionLedgerItem[] = [
   },
   {
     id: 'act-04',
-    timestamp: '10:30:19 UTC',
+    timestamp: '16:00:19 IST',
     leadAgent: 'Agent Delta::FDIR',
     actionExecuted: 'STR-2 Star Tracker Glare Filter Activated (Lunar Exclusion)',
     resolutionTime: '0.4 sec',
@@ -418,7 +418,7 @@ export const ANOMALY_PRESETS: AnomalyPreset[] = [
 export const HISTORICAL_INCIDENTS: HistoricalIncident[] = [
   {
     id: 'INC-8891',
-    timestamp: 'Mission Day 412 14:02:11 UTC',
+    timestamp: 'Mission Day 412 19:32:11 IST',
     subsystem: 'THERMAL',
     description: 'Radiator albedo reflection spike (+0.8°C/min gradient on Battery Cell #04)',
     autonomyLevel: 'L4 Unsupervised',
@@ -427,7 +427,7 @@ export const HISTORICAL_INCIDENTS: HistoricalIncident[] = [
   },
   {
     id: 'INC-8890',
-    timestamp: 'Mission Day 411 22:15:08 UTC',
+    timestamp: 'Mission Day 412 03:45:08 IST',
     subsystem: 'AOCS',
     description: 'South Atlantic Anomaly single-event upset on IMU Gyro-Z sensor register',
     autonomyLevel: 'L4 Unsupervised',
@@ -436,7 +436,7 @@ export const HISTORICAL_INCIDENTS: HistoricalIncident[] = [
   },
   {
     id: 'INC-8889',
-    timestamp: 'Mission Day 409 08:44:30 UTC',
+    timestamp: 'Mission Day 409 14:14:30 IST',
     subsystem: 'PROPULSION',
     description: 'Upper thermosphere density surge altitude decay (-12m altitude loss)',
     autonomyLevel: 'L4 Unsupervised',
@@ -445,7 +445,7 @@ export const HISTORICAL_INCIDENTS: HistoricalIncident[] = [
   },
   {
     id: 'INC-8888',
-    timestamp: 'Mission Day 406 17:11:02 UTC',
+    timestamp: 'Mission Day 406 22:41:02 IST',
     subsystem: 'POWER',
     description: 'Solar Array Drive SADA backlash friction warning in harmonic slip ring',
     autonomyLevel: 'L4 Unsupervised',
@@ -454,7 +454,7 @@ export const HISTORICAL_INCIDENTS: HistoricalIncident[] = [
   },
   {
     id: 'INC-8887',
-    timestamp: 'Mission Day 402 03:59:19 UTC',
+    timestamp: 'Mission Day 402 09:29:19 IST',
     subsystem: 'FDIR',
     description: 'Cryo-cooler focal plane detector temperature excursion during eclipse exit',
     autonomyLevel: 'L4 Unsupervised',
@@ -463,7 +463,7 @@ export const HISTORICAL_INCIDENTS: HistoricalIncident[] = [
   },
   {
     id: 'INC-8886',
-    timestamp: 'Mission Day 398 11:20:45 UTC',
+    timestamp: 'Mission Day 398 16:50:45 IST',
     subsystem: 'AOCS',
     description: 'Reaction wheel RW-3 spin tachometer jitter excursion above 3,200 RPM limit',
     autonomyLevel: 'HITL Supervised',
@@ -472,7 +472,7 @@ export const HISTORICAL_INCIDENTS: HistoricalIncident[] = [
   },
   {
     id: 'INC-8885',
-    timestamp: 'Mission Day 391 19:04:12 UTC',
+    timestamp: 'Mission Day 392 00:34:12 IST',
     subsystem: 'PROPULSION',
     description: 'Hydrazine latch valve secondary seal micro-leak pressure transient (0.4 psi)',
     autonomyLevel: 'HITL Supervised',

@@ -90,7 +90,7 @@ export const SolarBetaMonitor: React.FC<SolarBetaMonitorProps> = ({
                   isLiveTime ? 'bg-black animate-pulse' : 'bg-slate-500'
                 }`}
               />
-              LIVE UTC SYNC
+              LIVE IST SYNC
             </button>
             <button
               onClick={() => {
@@ -112,7 +112,7 @@ export const SolarBetaMonitor: React.FC<SolarBetaMonitorProps> = ({
             <button
               onClick={onResetToLive}
               className="p-1.5 rounded-lg bg-[#05070a] border border-[#1e293b] text-slate-400 hover:text-white cursor-pointer transition-colors"
-              title="Reset to Live UTC"
+              title="Reset to Live IST"
             >
               <RefreshCw size={13} />
             </button>

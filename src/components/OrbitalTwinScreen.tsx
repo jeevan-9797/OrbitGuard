@@ -187,7 +187,7 @@ export const OrbitalTwinScreen: React.FC<OrbitalTwinScreenProps> = ({
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-slate-400">SOLAR BETA (β)</span>
               {isLiveTime ? (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" title="Real-time live UTC synchronization" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" title="Real-time live IST synchronization" />
               ) : (
                 <span className="px-1 text-[8px] bg-cyan-500/20 text-cyan-300 font-bold rounded">SIM</span>
               )}

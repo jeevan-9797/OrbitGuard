@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AgentStatus, AutonomyMode, HITLThreshold, CoTLogEntry, InterventionLedgerItem, ManualPulseEvent } from '../types';
 import { INITIAL_LEDGER_ITEMS } from '../data/mockFlightData';
 import { sound } from '../utils/audio';
+import { getISTTimeWithMs } from '../utils/time';
 import { PulseTrajectoryGraph } from './PulseTrajectoryGraph';
 import { VideogameLoadingSlider } from './VideogameLoadingSlider';
 import {
@@ -38,7 +39,7 @@ export const AgentMeshScreen: React.FC<AgentMeshScreenProps> = ({
   const [cotLogs, setCotLogs] = useState<CoTLogEntry[]>([
     {
       id: 'cot-1',
-      timestamp: '14:02:11.60',
+      timestamp: '19:32:11.60 IST',
       agent: 'Agent Alpha::Thermal',
       tag: 'OBSERVE',
       tagColor: 'bg-cyan-500/20 text-cyan-300',
@@ -46,7 +47,7 @@ export const AgentMeshScreen: React.FC<AgentMeshScreenProps> = ({
     },
     {
       id: 'cot-2',
-      timestamp: '14:02:11.64',
+      timestamp: '19:32:11.64 IST',
       agent: 'Agent Beta::AOCS',
       tag: 'CROSS-CHECK',
       tagColor: 'bg-sky-500/20 text-sky-300',
@@ -54,7 +55,7 @@ export const AgentMeshScreen: React.FC<AgentMeshScreenProps> = ({
     },
     {
       id: 'cot-3',
-      timestamp: '14:02:11.72',
+      timestamp: '19:32:11.72 IST',
       agent: 'SWARM_BFT',
       tag: 'CONSENSUS',
       tagColor: 'bg-green-500/20 text-green-300',
@@ -62,7 +63,7 @@ export const AgentMeshScreen: React.FC<AgentMeshScreenProps> = ({
     },
     {
       id: 'cot-4',
-      timestamp: '14:02:11.80',
+      timestamp: '19:32:11.80 IST',
       agent: 'Agent Beta::AOCS',
       tag: 'DISPATCH',
       tagColor: 'bg-cyan-500 text-black font-bold',
@@ -117,8 +118,7 @@ export const AgentMeshScreen: React.FC<AgentMeshScreenProps> = ({
       ];
       const action = sampleActions[Math.floor(Math.random() * sampleActions.length)];
 
-      const now = new Date();
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.${String(Math.floor(now.getMilliseconds() / 10)).padStart(2, '0')}`;
+      const timeStr = getISTTimeWithMs();
 
       setCotLogs((prev) => [
         ...prev.slice(-40),
@@ -143,8 +143,7 @@ export const AgentMeshScreen: React.FC<AgentMeshScreenProps> = ({
 
     sound.playClick();
     const query = replInput.trim();
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.00`;
+    const timeStr = getISTTimeWithMs();
 
     const userEntry: CoTLogEntry = {
       id: `cot-user-${Date.now()}`,
@@ -187,8 +186,7 @@ export const AgentMeshScreen: React.FC<AgentMeshScreenProps> = ({
 
   // Register manual pulse event and calculate kinetic trajectory perturbations
   const registerPulseEvent = (thruster: string, durationMs: number) => {
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.${String(Math.floor(now.getMilliseconds() / 10)).padStart(2, '0')}`;
+    const timeStr = getISTTimeWithMs();
 
     const isPrograde = thruster === '+X';
     const isRetrograde = thruster === '-X';
@@ -246,8 +244,7 @@ export const AgentMeshScreen: React.FC<AgentMeshScreenProps> = ({
 
   const handleClearPulses = () => {
     setManualPulses([]);
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.00`;
+    const timeStr = getISTTimeWithMs();
     setCotLogs((prev) => [
       ...prev,
       {
