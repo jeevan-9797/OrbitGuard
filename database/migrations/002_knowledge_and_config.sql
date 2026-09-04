@@ -1,80 +1,70 @@
 -- ============================================================================
--- Migration 002: Knowledge and Configuration Tables
--- 6 Tables: action_catalog, operating_modes, telemetry_baselines,
--- historical_incidents, runbook_templates, system_config
+-- Migration 002: Knowledge and Configuration Schema
+-- Satellite Multi-Agent AI System
 -- ============================================================================
 
--- 1. Action Catalog
+-- 1. Action Catalog (Closed vocabulary of valid actions for AI planner)
 CREATE TABLE IF NOT EXISTS action_catalog (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    action_code VARCHAR(64) UNIQUE NOT NULL,
-    subsystem_code VARCHAR(32) NOT NULL,
-    action_name VARCHAR(128) NOT NULL,
-    description TEXT,
-    risk_level VARCHAR(16) DEFAULT 'LOW',
-    default_parameters JSONB DEFAULT '{}'::jsonb,
-    is_reversible BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    action_code TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    preconditions JSONB NOT NULL DEFAULT '{}'::jsonb,
+    effects JSONB NOT NULL DEFAULT '{}'::jsonb,
+    rollback JSONB NOT NULL DEFAULT '{}'::jsonb,
+    risk_level TEXT NOT NULL DEFAULT 'LOW' CHECK (risk_level IN ('LOW', 'MEDIUM', 'HIGH')),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 2. Operating Modes
+-- 2. Operating Modes (Satellite flight modes and constraints)
 CREATE TABLE IF NOT EXISTS operating_modes (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    mode_code VARCHAR(32) UNIQUE NOT NULL,
-    mode_name VARCHAR(64) NOT NULL,
-    power_budget_w NUMERIC(8, 2),
-    thermal_envelope VARCHAR(64),
-    allowed_subsystems JSONB DEFAULT '[]'::jsonb,
-    description TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mode_code TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    constraints JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 3. Telemetry Baselines
+-- 3. Telemetry Baselines (Statistical normal reference ranges for metrics)
 CREATE TABLE IF NOT EXISTS telemetry_baselines (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    subsystem_code VARCHAR(32) NOT NULL,
-    metric_name VARCHAR(64) NOT NULL,
-    orbit_phase VARCHAR(32) DEFAULT 'ANY',
-    mean_val NUMERIC(12, 4) NOT NULL,
-    std_dev NUMERIC(12, 4) NOT NULL,
-    min_nominal NUMERIC(12, 4) NOT NULL,
-    max_nominal NUMERIC(12, 4) NOT NULL,
-    unit VARCHAR(24),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(subsystem_code, metric_name, orbit_phase)
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    satellite_id UUID REFERENCES satellites(id) ON DELETE CASCADE,
+    mode_code TEXT NOT NULL REFERENCES operating_modes(mode_code) ON UPDATE CASCADE,
+    subsystem_id UUID REFERENCES subsystems(id) ON DELETE CASCADE,
+    metric TEXT NOT NULL,
+    min_val DOUBLE PRECISION NOT NULL,
+    max_val DOUBLE PRECISION NOT NULL,
+    mean DOUBLE PRECISION NOT NULL,
+    stddev DOUBLE PRECISION NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_baseline_entry UNIQUE (satellite_id, mode_code, metric)
 );
 
--- 4. Historical Incidents
+-- 4. Historical Incidents (Curated reference cases for few-shot AI retrieval)
 CREATE TABLE IF NOT EXISTS historical_incidents (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    case_code VARCHAR(64) UNIQUE NOT NULL,
-    orbit_number VARCHAR(32),
-    subsystem_code VARCHAR(32) NOT NULL,
-    root_cause TEXT NOT NULL,
-    resolution_summary TEXT NOT NULL,
-    recovery_strategy VARCHAR(128),
-    mttr_seconds NUMERIC(8, 2),
-    lessons_learned TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    scenario TEXT NOT NULL,
+    anomaly_type TEXT NOT NULL,
+    evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+    diagnosis JSONB NOT NULL DEFAULT '{}'::jsonb,
+    resolution JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 5. Runbook Templates
+-- 5. Runbook Templates (Deterministic contingency procedures)
 CREATE TABLE IF NOT EXISTS runbook_templates (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    template_code VARCHAR(64) UNIQUE NOT NULL,
-    subsystem_code VARCHAR(32) NOT NULL,
-    title VARCHAR(128) NOT NULL,
-    trigger_criteria JSONB DEFAULT '{}'::jsonb,
-    action_sequence JSONB DEFAULT '[]'::jsonb,
-    fallback_sequence JSONB DEFAULT '[]'::jsonb,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    scenario TEXT NOT NULL UNIQUE,
+    steps JSONB NOT NULL DEFAULT '[]'::jsonb,
+    warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
+    verification JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 6. System Config
+-- 6. System Configuration (Dynamic application and demo parameters)
 CREATE TABLE IF NOT EXISTS system_config (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    config_key VARCHAR(64) UNIQUE NOT NULL,
-    config_value JSONB NOT NULL,
-    description TEXT,
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    version INT NOT NULL DEFAULT 1,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
