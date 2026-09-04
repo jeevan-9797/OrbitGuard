@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #05070a;
+  --color-surface: #0f172a;
+  --color-surface-dim: #05070a;
+  --color-surface-bright: #1e293b;
+  --color-surface-container-lowest: #05070a;
+  --color-surface-container-low: #0a1120;
+  --color-surface-container: #0f172a;
+  --color-surface-container-high: #1e293b;
+  --color-surface-container-highest: #334155;
+  --color-on-background: #cbd5e1;
+  --color-on-surface: #f8fafc;
+  --color-on-surface-variant: #94a3b8;
+  --color-inverse-surface: #f8fafc;
+  --color-inverse-on-surface: #0f172a;
+  --color-outline: #475569;
+  --color-outline-variant: #1e293b;
+  --color-surface-tint: #22d3ee;
+  --color-primary: #22d3ee;
+  --color-on-primary: #082f49;
+  --color-primary-container: #06b6d4;
+  --color-on-primary-container: #e0f2fe;
+  --color-primary-fixed: #38bdf8;
+  --color-primary-fixed-dim: #0284c7;
+  --color-on-primary-fixed: #082f49;
+  --color-on-primary-fixed-variant: #0369a1;
+  --color-secondary: #22c55e;
+  --color-on-secondary: #052e16;
+  --color-secondary-container: #15803d;
+  --color-on-secondary-container: #dcfce7;
+  --color-secondary-fixed: #4ade80;
+  --color-secondary-fixed-dim: #16a34a;
+  --color-on-secondary-fixed: #052e16;
+  --color-on-secondary-fixed-variant: #166534;
+  --color-tertiary: #f59e0b;
+  --color-on-tertiary: #451a03;
+  --color-tertiary-container: #d97706;
+  --color-on-tertiary-container: #fef3c7;
+  --color-tertiary-fixed: #fbbf24;
+  --color-tertiary-fixed-dim: #b45309;
+  --color-on-tertiary-fixed: #451a03;
+  --color-on-tertiary-fixed-variant: #78350f;
+  --color-error: #f43f5e;
+  --color-on-error: #4c0519;
+  --color-error-container: #be123c;
+  --color-on-error-container: #ffe4e6;
+
+  --font-space-grotesk: "Space Grotesk", sans-serif;
+  --font-jetbrains-mono: "JetBrains Mono", monospace;
+  --font-inter: "Inter", system-ui, -apple-system, sans-serif;
+
+  --spacing-unit-1: 0.125rem;
+  --spacing-unit-2: 0.25rem;
+  --spacing-unit-3: 0.375rem;
+  --spacing-unit-4: 0.5rem;
+  --spacing-unit-6: 0.75rem;
+  --spacing-unit-8: 1rem;
+  --spacing-unit-12: 1.5rem;
+  --spacing-unit-16: 2rem;
+  --spacing-gutter: 0.5rem;
+  --spacing-panel-padding: 0.75rem;
+}
+
+@layer base {
+  html, body {
+    margin: 0;
+    padding: 0;
+    background-color: #05070a;
+    color: #cbd5e1;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overscroll-behavior: none;
+  }
+}
+
+/* Bento Grid Theme Helper Classes */
+.bento-card {
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 1.5rem; /* 24px - rounded-3xl */
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bento-card:hover {
+  border-color: rgba(34, 211, 238, 0.25);
+}
+
+.bento-card-sub {
+  background-color: #05070a;
+  border: 1px solid #1e293b;
+  border-radius: 1rem; /* 16px - rounded-2xl */
+}
+
+.bento-chip {
+  padding: 0.25rem 0.75rem;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+}
+
+/* Custom Typography Utility Aliases */
+.font-display-hero {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 36px;
+  line-height: 44px;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+.font-headline-lg {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 24px;
+  line-height: 32px;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+.font-headline-md {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px;
+  line-height: 24px;
+  letter-spacing: 0em;
+  font-weight: 600;
+}
+.font-headline-sm {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+.font-body-lg {
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 400;
+}
+.font-body-md {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+}
+.font-body-sm {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.01em;
+  font-weight: 400;
+}
+.font-mono-lg {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  line-height: 24px;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+.font-mono-md {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: 0.01em;
+  font-weight: 500;
+}
+.font-mono-sm {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  font-weight: 400;
+}
+.font-label-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  line-height: 12px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #05070a;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #06b6d4;
+}

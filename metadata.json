@@ -1,6 +1,6 @@
 {
-  "name": "ORION Autonomous Satellite Digital Twin",
-  "description": "Real-time aerospace digital twin, multi-agent swarm mission operations console, and propellantless trajectory correction laboratory (solar sailing, electrodynamic tethering, aerotrim) for LEO spacecraft ORION.",
+  "name": "ASTRA-TWIN Satellite Operations & Autonomous Flight Sandbox",
+  "description": "Interactive aerospace digital twin, real-time multi-agent autonomous reasoning console, orbital trajectory tracking, and chaos anomaly injection sandbox.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
