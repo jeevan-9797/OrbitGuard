@@ -9,6 +9,7 @@ import { ChaosAnomalyLabScreen } from './components/ChaosAnomalyLabScreen';
 import { AnalyticsScreen } from './components/AnalyticsScreen';
 import { PropellantlessControlScreen } from './components/PropellantlessControlScreen';
 import { OrbitalCaseSimulatorScreen } from './components/OrbitalCaseSimulatorScreen';
+import { StartupRoutineModal } from './components/StartupRoutineModal';
 import { sound } from './utils/audio';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
   });
   const [selectedPresetId, setSelectedPresetId] = useState<string>('thermal');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [showStartupRoutine, setShowStartupRoutine] = useState<boolean>(true);
 
   const handleSelectScreen = (screen: ActiveScreen) => {
     sound.playClick();
@@ -67,6 +69,7 @@ export default function App() {
         isolatedAgentCount={isolatedCount}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         sidebarOpen={sidebarOpen}
+        onOpenStartupRoutine={() => setShowStartupRoutine(true)}
       />
 
       <div className="flex-1 flex pt-16">
@@ -77,6 +80,7 @@ export default function App() {
           onOpenOverrideDeck={handleOpenOverrideDeck}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          onOpenStartupRoutine={() => setShowStartupRoutine(true)}
         />
 
         {/* Main Operational Viewport */}
@@ -119,6 +123,12 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {/* Autonomous Pre-flight Startup Routine & Orion Launch Modal */}
+      <StartupRoutineModal
+        isOpen={showStartupRoutine}
+        onClose={() => setShowStartupRoutine(false)}
+      />
     </div>
   );
 }

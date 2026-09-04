@@ -1,6 +1,6 @@
 {
-  "name": "ASTRA-7 Autonomous Satellite Digital Twin",
-  "description": "Real-time aerospace digital twin, multi-agent swarm mission operations console, and propellantless trajectory correction laboratory (solar sailing, electrodynamic tethering, aerotrim) for LEO satellite ASTRA-7.",
+  "name": "ORION Autonomous Satellite Digital Twin",
+  "description": "Real-time aerospace digital twin, multi-agent swarm mission operations console, and propellantless trajectory correction laboratory (solar sailing, electrodynamic tethering, aerotrim) for LEO spacecraft ORION.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

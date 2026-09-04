@@ -629,7 +629,7 @@ export const EarthOrbitalTwin3D: React.FC<EarthOrbitalTwin3DProps> = ({
 
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 9px monospace';
-      ctx.fillText('ASTRA-7 // LEO', tagX + 6, tagY + 12);
+      ctx.fillText('ORION // LEO', tagX + 6, tagY + 12);
 
       ctx.fillStyle = inShadow ? '#f43f5e' : '#4edea3';
       ctx.font = '8px monospace';

@@ -21,7 +21,7 @@ export const MISSION_CONSORTIUM_SEAL = {
     'Jeevan M',
     'Jyotiraditya Pradip Khuman',
   ],
-  system: 'ASTRA-7 Autonomous Constellation FDIR & Propellantless Twin',
+  system: 'ORION Autonomous Constellation FDIR & Propellantless Twin',
 } as const;
 
 export interface SeedSatellite {
@@ -96,7 +96,7 @@ export interface SeedScenario {
 export const FLEET_SATELLITES: SeedSatellite[] = [
   {
     id: 'a0000000-0000-0000-0000-000000000001',
-    name: 'ASTRA-7',
+    name: 'ORION',
     noradId: 59124,
     designator: '2024-042A',
     orbitType: 'LEO',

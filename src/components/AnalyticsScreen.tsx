@@ -52,7 +52,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ agents }) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ASTRA-7-Mission-Telemetry-Log-${Date.now()}.csv`;
+    a.download = `ORION-Mission-Telemetry-Log-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -60,8 +60,8 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ agents }) => {
   const handleExportJson = () => {
     sound.playClick();
     const exportData = {
-      mission: 'ASTRA-7 Autonomous Satellite Digital Twin',
-      spacecraftId: 'ASTRA-7-NORAD-49211',
+      mission: 'ORION Autonomous Satellite Digital Twin',
+      spacecraftId: 'ORION-NORAD-49211',
       epochTime: new Date().toISOString(),
       agents: agents.map((a) => ({
         id: a.id,
@@ -83,7 +83,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ agents }) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ASTRA-7-DigitalTwin-Dataset-${Date.now()}.json`;
+    a.download = `ORION-DigitalTwin-Dataset-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };

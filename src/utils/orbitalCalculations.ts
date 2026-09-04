@@ -118,7 +118,7 @@ export function calculateSolarBeta(date: Date): SolarBetaData {
   // Sun-synchronous nodal precession: RAAN drifts ~0.9856 deg/day to match Earth's orbit around the Sun
   const jd = date.getTime() / 86400000 + 2440587.5;
   const d = jd - 2451545.0;
-  // Calibrated nominal RAAN for ASTRA-7 10:30 AM LTDN orbit
+  // Calibrated nominal RAAN for ORION 10:30 AM LTDN orbit
   let raanDeg = (158.4 + 0.9856474 * d) % 360;
   if (raanDeg < 0) raanDeg += 360;
   const raanRad = (raanDeg * Math.PI) / 180;

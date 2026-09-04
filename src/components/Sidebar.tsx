@@ -18,6 +18,7 @@ import {
   X,
   Wind,
   History,
+  Rocket,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -26,6 +27,7 @@ interface SidebarProps {
   onOpenOverrideDeck: () => void;
   isOpen: boolean;
   onClose: () => void;
+  onOpenStartupRoutine?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -34,6 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenOverrideDeck,
   isOpen,
   onClose,
+  onOpenStartupRoutine,
 }) => {
   const menuItems: {
     id: ActiveScreen;
@@ -232,13 +235,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <ChevronRight size={12} />
             </button>
           </div>
+
+          {/* ORION Startup Routine Diagnostic Sequence */}
+          {onOpenStartupRoutine && (
+            <button
+              onClick={() => {
+                sound.playClick();
+                onOpenStartupRoutine();
+                onClose();
+              }}
+              className="w-full p-2.5 rounded-2xl bg-[#0f172a] hover:bg-emerald-500/10 border border-[#1e293b] hover:border-emerald-500/40 text-slate-300 hover:text-emerald-300 font-mono text-[10px] font-bold uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+            >
+              <Rocket size={13} className="text-emerald-400" />
+              <span>ORION STARTUP SEQUENCE</span>
+            </button>
+          )}
         </div>
 
         {/* Ephemeris Footer Summary */}
         <div className="pt-3 border-t border-[#1e293b] font-mono text-[10px] text-slate-400 flex flex-col gap-1.5">
           <div className="flex justify-between">
             <span>SATELLITE:</span>
-            <span className="text-slate-200 font-bold">ASTRA-7</span>
+            <span className="text-slate-200 font-bold">ORION</span>
           </div>
           <div className="flex justify-between">
             <span>NORAD ID:</span>

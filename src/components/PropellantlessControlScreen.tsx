@@ -1735,7 +1735,7 @@ export const PropellantlessControlScreen: React.FC = () => {
                           <Orbit size={12} />
                           SPACECRAFT ATTITUDE
                         </span>
-                        <span className="text-[9px] text-slate-500">ASTRA-7</span>
+                        <span className="text-[9px] text-slate-500">ORION</span>
                       </div>
 
                       <div className="flex flex-col gap-1 text-[9.5px]">

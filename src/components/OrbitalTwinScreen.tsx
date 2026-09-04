@@ -163,7 +163,7 @@ export const OrbitalTwinScreen: React.FC<OrbitalTwinScreenProps> = ({
           <span className="w-2.5 h-2.5 rounded-full bg-green-400 animate-ping"></span>
           <div className="flex flex-col">
             <span className="font-bold text-sm text-white tracking-wide flex items-center gap-2">
-              ASTRA-7 NORAD ID 59421
+              ORION NORAD ID 59421
               <span className="px-2 py-0.5 text-[9px] rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-mono">
                 TLE-2026.142
               </span>

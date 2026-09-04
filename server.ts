@@ -24,7 +24,7 @@ app.use(express.json());
 
 // Cryptographic Provenance & Authorship Fingerprint
 const PROVENANCE_SEAL = {
-  project: 'ASTRA-7 Autonomous Satellite Digital Twin',
+  project: 'ORION Autonomous Satellite Digital Twin',
   competition: 'Smart Horizon 48-Hour Hackathon',
   team_id: '098',
   topic: 'DST-1',
@@ -385,7 +385,7 @@ app.post('/api/ai/diagnose', async (req, res) => {
 
   if (ai) {
     try {
-      const prompt = `You are Agent Delta (Supervisory FDIR & Swarm Mesh Leader) on the ASTRA-7 LEO satellite digital twin.
+      const prompt = `You are Agent Delta (Supervisory FDIR & Swarm Mesh Leader) on the ORION LEO satellite digital twin.
 You work in tandem with the deterministic OrbitGuard Safety Validation Engine.
 
 CURRENT ANOMALY CONTEXT:
@@ -454,7 +454,7 @@ app.post('/api/ai/repl', async (req, res) => {
   }
 
   try {
-    const systemInstruction = `You are Agent Delta, the supervisory FDIR AI and Mesh Leader for the ASTRA-7 LEO spacecraft (520km altitude, 97.4° Sun-Synchronous Orbit).
+    const systemInstruction = `You are Agent Delta, the supervisory FDIR AI and Mesh Leader for the ORION LEO spacecraft (520km altitude, 97.4° Sun-Synchronous Orbit).
 You interface with the OrbitGuard Aerospace API to evaluate safety corridors and orbital dynamics.
 Respond as an elite, succinct flight controller. Keep responses under 3 sentences, use real orbital mechanics terminology (reaction wheel saturation, beta angle, magnetic torque rods, telemetry corridors), and provide actionable telemetry insights.`;
 
@@ -481,7 +481,10 @@ Respond as an elite, succinct flight controller. Keep responses under 3 sentence
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

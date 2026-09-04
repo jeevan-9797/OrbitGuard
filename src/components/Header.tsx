@@ -24,6 +24,7 @@ import {
   RefreshCw,
   ExternalLink,
   CheckCircle2,
+  Rocket,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -34,6 +35,7 @@ interface HeaderProps {
   isolatedAgentCount: number;
   onToggleSidebar: () => void;
   sidebarOpen: boolean;
+  onOpenStartupRoutine?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -44,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
   isolatedAgentCount,
   onToggleSidebar,
   sidebarOpen,
+  onOpenStartupRoutine,
 }) => {
   const [audioEnabled, setAudioEnabled] = useState(sound.enabled);
   const [ogHealth, setOgHealth] = useState<OrbitGuardHealth | null>(null);
@@ -118,7 +121,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-sm text-white tracking-wider font-display-hero">
-                ASTRA-7
+                ORION
               </span>
               <span
                 className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
@@ -213,6 +216,21 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
           {autonomyMode === 'OVERRIDE' ? 'MANUAL' : autonomyMode}
         </span>
+
+        {/* Startup Diagnostics Launcher Button */}
+        {onOpenStartupRoutine && (
+          <button
+            onClick={() => {
+              sound.playClick();
+              onOpenStartupRoutine();
+            }}
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#05070a] hover:bg-emerald-500/10 border border-[#1e293b] hover:border-emerald-500/40 text-slate-300 hover:text-emerald-300 text-[10px] font-bold tracking-wide transition-all cursor-pointer shadow-xs"
+            title="Open ORION Autonomous Startup & Diagnostics Sequence"
+          >
+            <Rocket size={12} className="text-emerald-400" />
+            <span>STARTUP LOGS</span>
+          </button>
+        )}
 
         {/* Audio FX Toggle */}
         <button
