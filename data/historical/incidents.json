@@ -1,0 +1,47 @@
+[
+  {
+    "case_id": "HIST-CASE-2024-081",
+    "mission": "LEO-SAT-CONSTELLATION",
+    "subsystem": "EPS",
+    "anomaly_type": "LOW_BATTERY",
+    "observed_symptoms": "Bus voltage dropped to 18.6V during high-power imaging payload pass.",
+    "resolution_applied": "Shed non-essential optical payload and switched to low-bandwidth telemetry profile.",
+    "outcome": "Bus voltage stabilized to 27.2V within 12 minutes. No battery cell damage observed.",
+    "lessons_learned": "Early payload load reduction prevented bus drop below critical 16.0V survival threshold.",
+    "metadata": {
+      "source": "FLIGHT_ANOMALY_DATABASE_ARCHIVE",
+      "status": "HISTORICAL_REFERENCE_ONLY",
+      "is_advisory": true
+    }
+  },
+  {
+    "case_id": "HIST-CASE-2024-114",
+    "mission": "LEO-SAT-CONSTELLATION",
+    "subsystem": "Thermal",
+    "anomaly_type": "HIGH_TEMPERATURE",
+    "observed_symptoms": "Battery pack 1 temperature elevated to 52.3°C following eclipse exit.",
+    "resolution_applied": "Throttled payload processing and transitioned thermal subsystem to safe thermal mode.",
+    "outcome": "Temperature peaked at 53.1°C and dropped to 31.8°C within 180 seconds.",
+    "lessons_learned": "Prioritizing payload throttling before safe thermal mode activation avoided attitude perturbations.",
+    "metadata": {
+      "source": "FLIGHT_ANOMALY_DATABASE_ARCHIVE",
+      "status": "HISTORICAL_REFERENCE_ONLY",
+      "is_advisory": true
+    }
+  },
+  {
+    "case_id": "HIST-CASE-2025-029",
+    "mission": "LEO-SAT-CONSTELLATION",
+    "subsystem": "ADCS",
+    "anomaly_type": "REACTION_WHEEL_OVERLOAD",
+    "observed_symptoms": "Reaction wheel 2 speed jitter exceeded 450 RPM with attitude error peaking at 0.35 deg.",
+    "resolution_applied": "Reduced non-essential slewing maneuvers and switched to redundant star tracker / rate sensor channel.",
+    "outcome": "Attitude error normalized to 0.02 deg within 150 seconds.",
+    "lessons_learned": "Switching to redundant sensing resolved control loop instability caused by noisy sensor channel.",
+    "metadata": {
+      "source": "FLIGHT_ANOMALY_DATABASE_ARCHIVE",
+      "status": "HISTORICAL_REFERENCE_ONLY",
+      "is_advisory": true
+    }
+  }
+]

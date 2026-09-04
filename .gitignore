@@ -1,4 +1,5 @@
 # Environment variables & secrets (NEVER COMMIT)
+
 .env
 .env.local
 .env.*.local
@@ -6,6 +7,7 @@
 *.key
 
 # Python
+
 __pycache__/
 *.py[cod]
 *$py.class
@@ -31,12 +33,14 @@ wheels/
 *.egg
 
 # Database local storage & logs
+
 *.log
 *.sqlite
 *.sqlite3
 pgdata/
 
 # OS & Editor
+
 .DS_Store
 Thumbs.db
 .idea/

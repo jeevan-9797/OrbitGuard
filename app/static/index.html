@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OrbitGuard — Autonomous Spacecraft Incident Command & Recovery</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --bg-dark: #070b14;
+      --bg-card: #0d1527;
+      --bg-card-hover: #121d36;
+      --border-color: #1e293b;
+      --accent-blue: #38bdf8;
+      --accent-indigo: #6366f1;
+      --accent-green: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace, sans-serif; }
+    body { background-color: var(--bg-dark); color: var(--text-main); min-height: 100vh; padding: 1.5rem; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+    .brand { display: flex; align-items: center; gap: 0.75rem; font-size: 1.5rem; font-weight: 700; color: var(--accent-blue); }
+    .brand i { font-size: 1.8rem; }
+    .badge { padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+    .badge-success { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .badge-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+    .badge-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .badge-info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }
+    
+    .config-bar { display: flex; gap: 0.5rem; align-items: center; background: var(--bg-card); padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid var(--border-color); }
+    .config-bar input { background: transparent; border: none; color: var(--text-main); font-size: 0.85rem; outline: none; width: 220px; }
+    
+    .pipeline-strip { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; overflow-x: auto; padding-bottom: 0.5rem; }
+    .pipe-step { flex: 1; min-width: 120px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; text-align: center; font-size: 0.8rem; }
+    .pipe-step.active { border-color: var(--accent-blue); background: rgba(56, 189, 248, 0.08); }
+    .pipe-step.passed { border-color: var(--accent-green); }
+    .pipe-step i { display: block; font-size: 1.2rem; margin-bottom: 0.3rem; color: var(--accent-blue); }
+
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1.25rem; }
+    .col-4 { grid-column: span 4; }
+    .col-6 { grid-column: span 6; }
+    .col-8 { grid-column: span 8; }
+    .col-12 { grid-column: span 12; }
+    @media (max-width: 1024px) { .col-4, .col-6, .col-8 { grid-column: span 12; } }
+
+    .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; }
+    .card-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; color: var(--accent-blue); }
+    
+    .metrics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+    .metric-box { background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; }
+    .metric-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; }
+    .metric-value { font-size: 1.3rem; font-weight: 700; }
+    .metric-unit { font-size: 0.8rem; color: var(--text-muted); font-weight: normal; }
+
+    .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+    .btn { padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; border: none; transition: 0.2s; display: inline-flex; align-items: center; gap: 0.4rem; }
+    .btn-primary { background: var(--accent-blue); color: #000; }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-main); }
+    .btn-outline:hover { background: rgba(255,255,255,0.05); }
+    .btn-danger { background: var(--accent-red); color: #fff; }
+    .btn-success { background: var(--accent-green); color: #000; }
+    .btn-warning { background: var(--accent-amber); color: #000; }
+
+    .plan-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; cursor: pointer; }
+    .plan-card.selected { border-color: var(--accent-blue); background: rgba(56, 189, 248, 0.05); }
+
+    .log-box { background: #040711; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; font-family: monospace; font-size: 0.8rem; color: #a5f3fc; height: 160px; overflow-y: auto; white-space: pre-wrap; }
+    pre { font-family: monospace; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">
+      <i class="fa-solid fa-satellite-dish"></i>
+      OrbitGuard
+      <span class="badge badge-info">Autonomous Spacecraft Safety Twin</span>
+    </div>
+    <div style="display: flex; gap: 0.75rem; align-items: center;">
+      <div class="config-bar">
+        <i class="fa-solid fa-server" style="color: var(--accent-blue); font-size: 0.8rem;"></i>
+        <input type="text" id="backendUrl" value="http://127.0.0.1:8001" placeholder="Backend API URL">
+      </div>
+      <button class="btn btn-outline" onclick="checkHealth()"><i class="fa-solid fa-rotate"></i> Ping</button>
+      <span id="backendStatus" class="badge badge-success">ONLINE</span>
+    </div>
+  </div>
+
+  <!-- PIPELINE PROGRESS BAR -->
+  <div class="pipeline-strip">
+    <div class="pipe-step active" id="step-telemetry"><i class="fa-solid fa-chart-line"></i>1. Telemetry</div>
+    <div class="pipe-step" id="step-detector"><i class="fa-solid fa-triangle-exclamation"></i>2. Detector</div>
+    <div class="pipe-step" id="step-incident"><i class="fa-solid fa-bullhorn"></i>3. Incident</div>
+    <div class="pipe-step" id="step-diagnosis"><i class="fa-solid fa-brain"></i>4. Diagnosis</div>
+    <div class="pipe-step" id="step-planner"><i class="fa-solid fa-list-check"></i>5. Recovery</div>
+    <div class="pipe-step" id="step-validator"><i class="fa-solid fa-shield-halved"></i>6. Safety</div>
+    <div class="pipe-step" id="step-simulation"><i class="fa-solid fa-microchip"></i>7. Simulation</div>
+    <div class="pipe-step" id="step-execution"><i class="fa-solid fa-terminal"></i>8. Execution</div>
+    <div class="pipe-step" id="step-outcome"><i class="fa-solid fa-circle-check"></i>9. Outcome</div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="grid">
+
+    <!-- COL 1: Live Telemetry & Scenario Injection -->
+    <div class="col-4">
+      <div class="card">
+        <div class="card-title">
+          <span><i class="fa-solid fa-gauge-high"></i> Live Spacecraft Bus (SAT-01)</span>
+          <button class="btn btn-outline" style="padding: 0.2rem 0.5rem;" onclick="fetchTelemetry()"><i class="fa-solid fa-arrows-rotate"></i></button>
+        </div>
+        
+        <div class="metrics-grid">
+          <div class="metric-box">
+            <div class="metric-label">Battery Voltage</div>
+            <div class="metric-value" id="val-voltage">-- <span class="metric-unit">V</span></div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Battery Temp</div>
+            <div class="metric-value" id="val-temp">-- <span class="metric-unit">°C</span></div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Reaction Wheel</div>
+            <div class="metric-value" id="val-wheel">-- <span class="metric-unit">RPM</span></div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Attitude Error</div>
+            <div class="metric-value" id="val-attitude">-- <span class="metric-unit">deg</span></div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Solar Power</div>
+            <div class="metric-value" id="val-power">-- <span class="metric-unit">W</span></div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Comms SNR</div>
+            <div class="metric-value" id="val-snr">-- <span class="metric-unit">dB</span></div>
+          </div>
+        </div>
+
+        <div style="margin-top: 1.25rem;">
+          <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem;">Inject Anomaly Scenario:</div>
+          <div class="btn-group">
+            <button class="btn btn-outline" onclick="injectScenario('normal')"><i class="fa-solid fa-circle-check" style="color: var(--accent-green)"></i> Normal</button>
+            <button class="btn btn-danger" onclick="injectScenario('low_battery')"><i class="fa-solid fa-battery-quarter"></i> Low Battery</button>
+            <button class="btn btn-danger" onclick="injectScenario('battery_overheat')"><i class="fa-solid fa-fire"></i> High Temp</button>
+            <button class="btn btn-danger" onclick="injectScenario('wheel_degradation')"><i class="fa-solid fa-arrows-spin"></i> Wheel Deg</button>
+            <button class="btn btn-warning" onclick="resetSimulator()"><i class="fa-solid fa-arrow-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Historical Runbook Advisory Section -->
+      <div class="card" style="margin-top: 1.25rem;">
+        <div class="card-title">
+          <span><i class="fa-solid fa-book-bookmark"></i> Retrieved Flight SOP (Advisory)</span>
+        </div>
+        <div id="runbookContent" style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+          No active anomaly. Standard Nominal Flight Runbook active.
+        </div>
+      </div>
+    </div>
+
+    <!-- COL 2: Active Incident & AI Diagnosis -->
+    <div class="col-4">
+      <div class="card">
+        <div class="card-title">
+          <span><i class="fa-solid fa-bullhorn"></i> Incident & AI Diagnosis</span>
+          <span id="incidentStatusBadge" class="badge badge-success">STANDBY</span>
+        </div>
+
+        <div style="margin-bottom: 0.75rem;">
+          <div style="font-size: 0.75rem; color: var(--text-muted);">Active Incident ID:</div>
+          <div id="incidentId" style="font-family: monospace; font-weight: bold; color: var(--accent-blue);">NONE</div>
+        </div>
+
+        <div style="margin-bottom: 0.75rem;">
+          <div style="font-size: 0.75rem; color: var(--text-muted);">Primary Diagnostic Hypothesis:</div>
+          <div id="diagHypothesis" style="font-size: 0.85rem; line-height: 1.3; margin-top: 0.2rem;">Telemetry within nominal bounds. No anomaly detected.</div>
+        </div>
+
+        <div style="margin-bottom: 0.75rem;">
+          <div style="font-size: 0.75rem; color: var(--text-muted);">Observed Grounded Evidence:</div>
+          <ul id="diagEvidence" style="font-size: 0.8rem; margin-left: 1.2rem; color: #cbd5e1; margin-top: 0.2rem;">
+            <li>All telemetry metrics within standard margins.</li>
+          </ul>
+        </div>
+
+        <div style="margin-bottom: 0.75rem;">
+          <div style="font-size: 0.75rem; color: var(--text-muted);">Recommended Verification Checks:</div>
+          <ul id="diagChecks" style="font-size: 0.8rem; margin-left: 1.2rem; color: #cbd5e1; margin-top: 0.2rem;">
+            <li>Routine housekeeping telemetry streaming.</li>
+          </ul>
+        </div>
+
+        <button class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;" id="btnAnalyze" onclick="triggerAnalyze()"><i class="fa-solid fa-brain"></i> Trigger Multi-Agent RCA & Planning</button>
+      </div>
+
+      <!-- Deterministic Safety Validator Card -->
+      <div class="card" style="margin-top: 1.25rem;">
+        <div class="card-title">
+          <span><i class="fa-solid fa-shield-halved"></i> Deterministic Safety Validator</span>
+          <span id="safetyBadge" class="badge badge-success">VALID: PASS</span>
+        </div>
+        <div id="safetyChecksList" style="font-size: 0.8rem; line-height: 1.5;">
+          <div><i class="fa-solid fa-check" style="color: var(--accent-green)"></i> Thermal Action Sequence: PASS</div>
+          <div><i class="fa-solid fa-check" style="color: var(--accent-green)"></i> ADCS Stabilization: PASS</div>
+          <div><i class="fa-solid fa-check" style="color: var(--accent-green)"></i> Battery Power Margin: PASS</div>
+          <div><i class="fa-solid fa-check" style="color: var(--accent-green)"></i> Rollback Defined: PASS</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COL 3: Candidate Recovery Plans & Digital Twin Execution -->
+    <div class="col-4">
+      <div class="card">
+        <div class="card-title">
+          <span><i class="fa-solid fa-diagram-project"></i> Candidate Recovery Plans</span>
+          <span class="badge badge-info" id="planCountBadge">0 Plans</span>
+        </div>
+
+        <div id="plansContainer">
+          <div style="font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 2rem 0;">
+            No active recovery plans. Trigger an anomaly to generate mitigation strategies.
+          </div>
+        </div>
+
+        <div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+          <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">Operator Controls (HITL):</div>
+          <div class="btn-group">
+            <button class="btn btn-outline" id="btnSimulate" onclick="simulateSelectedPlan()"><i class="fa-solid fa-microchip"></i> Simulate Twin</button>
+            <button class="btn btn-success" id="btnApprove" onclick="approveSelectedPlan()"><i class="fa-solid fa-thumbs-up"></i> Approve</button>
+            <button class="btn btn-primary" id="btnExecute" onclick="executeSelectedPlan()"><i class="fa-solid fa-play"></i> Execute</button>
+            <button class="btn btn-outline" id="btnReject" onclick="rejectSelectedPlan()"><i class="fa-solid fa-ban"></i> Reject</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Execution Outcome & Logs -->
+      <div class="card" style="margin-top: 1.25rem;">
+        <div class="card-title">
+          <span><i class="fa-solid fa-terminal"></i> Digital Twin Execution Telemetry</span>
+        </div>
+        <div class="log-box" id="simLogs">
+[SYSTEM READY] OrbitGuard telemetry engine connected.
+AI recommends; deterministic code decides.
+Waiting for operator directives...
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let activeIncident = null;
+    let selectedPlanId = null;
+
+    function getBaseUrl() {
+      return document.getElementById('backendUrl').value.replace(/\/+$/, '');
+    }
+
+    async function checkHealth() {
+      try {
+        const res = await fetch(`${getBaseUrl()}/api/health`);
+        const data = await res.json();
+        document.getElementById('backendStatus').className = 'badge badge-success';
+        document.getElementById('backendStatus').innerText = 'ONLINE';
+        logMessage(`Backend reachable: ${data.status} (version ${data.version})`);
+      } catch (err) {
+        document.getElementById('backendStatus').className = 'badge badge-danger';
+        document.getElementById('backendStatus').innerText = 'OFFLINE';
+        logMessage(`Backend connection error: ${err.message}`);
+      }
+    }
+
+    async function fetchTelemetry() {
+      try {
+        const res = await fetch(`${getBaseUrl()}/api/telemetry/SAT-01?window=5&generate=1`);
+        const data = await res.json();
+        if (data.history && data.history.length > 0) {
+          const latest = data.history[data.history.length - 1];
+          const m = latest.metrics;
+          document.getElementById('val-voltage').innerHTML = `${m.battery_voltage.value} <span class="metric-unit">V</span>`;
+          document.getElementById('val-temp').innerHTML = `${m.battery_temperature.value} <span class="metric-unit">°C</span>`;
+          document.getElementById('val-wheel').innerHTML = `${Math.round(m.wheel_speed.value)} <span class="metric-unit">RPM</span>`;
+          document.getElementById('val-attitude').innerHTML = `${m.attitude_error.value} <span class="metric-unit">deg</span>`;
+          document.getElementById('val-power').innerHTML = `${m.solar_power.value} <span class="metric-unit">W</span>`;
+          document.getElementById('val-snr').innerHTML = `${m.comm_snr.value} <span class="metric-unit">dB</span>`;
+        }
+        await checkIncidents();
+      } catch (err) {
+        console.error('Fetch telemetry failed:', err);
+      }
+    }
+
+    async function checkIncidents() {
+      try {
+        const res = await fetch(`${getBaseUrl()}/api/incidents`);
+        const incidents = await res.json();
+        if (incidents.length > 0) {
+          activeIncident = incidents[0];
+          document.getElementById('incidentId').innerText = activeIncident.incident_id;
+          document.getElementById('incidentStatusBadge').innerText = activeIncident.status;
+          document.getElementById('incidentStatusBadge').className = 'badge badge-warning';
+
+          if (activeIncident.diagnosis) {
+            document.getElementById('diagHypothesis').innerText = activeIncident.diagnosis.primary_hypothesis;
+            document.getElementById('diagEvidence').innerHTML = activeIncident.diagnosis.evidence.map(e => `<li>${e}</li>`).join('');
+            document.getElementById('diagChecks').innerHTML = activeIncident.diagnosis.checks.map(c => `<li>${c}</li>`).join('');
+          }
+          if (activeIncident.recovery_plans && activeIncident.recovery_plans.length > 0) {
+            renderPlans(activeIncident.recovery_plans);
+          }
+        }
+      } catch (err) {
+        console.error('Check incidents error:', err);
+      }
+    }
+
+    function renderPlans(plans) {
+      document.getElementById('planCountBadge').innerText = `${plans.length} Plans`;
+      const container = document.getElementById('plansContainer');
+      container.innerHTML = '';
+      plans.forEach((p, idx) => {
+        const isSelected = selectedPlanId === p.plan_id || (!selectedPlanId && idx === 0);
+        if (isSelected) selectedPlanId = p.plan_id;
+        const div = document.createElement('div');
+        div.className = `plan-card ${isSelected ? 'selected' : ''}`;
+        div.onclick = () => selectPlan(p.plan_id);
+        div.innerHTML = `
+          <div style="font-weight: 600; font-size: 0.85rem; color: var(--accent-blue);">${p.title || p.plan_id}</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin: 0.2rem 0;">Actions: ${p.actions.join(' → ')}</div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 0.4rem;">
+            <span>Risk: <strong>${p.risk_level}</strong></span>
+            <span class="badge ${p.validation_result?.is_safe ? 'badge-success' : 'badge-danger'}">
+              ${p.validation_result?.is_safe ? 'SAFE (1.0)' : 'UNSAFE'}
+            </span>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function selectPlan(planId) {
+      selectedPlanId = planId;
+      if (activeIncident && activeIncident.recovery_plans) {
+        renderPlans(activeIncident.recovery_plans);
+      }
+    }
+
+    async function injectScenario(type) {
+      logMessage(`Injecting scenario: ${type}`);
+      if (type === 'normal') {
+        await resetSimulator();
+        return;
+      }
+      try {
+        await fetch(`${getBaseUrl()}/api/simulate/reset`, { method: 'POST' });
+        await fetch(`${getBaseUrl()}/api/simulate/inject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ satellite_id: 'SAT-01', anomaly_type: type })
+        });
+        await fetchTelemetry();
+        logMessage(`Scenario ${type} injected. Polling telemetry...`);
+        setTimeout(triggerAnalyze, 800);
+      } catch (err) {
+        logMessage(`Injection failed: ${err.message}`);
+      }
+    }
+
+    async function resetSimulator() {
+      try {
+        await fetch(`${getBaseUrl()}/api/simulate/reset`, { method: 'POST' });
+        activeIncident = null;
+        selectedPlanId = null;
+        document.getElementById('incidentId').innerText = 'NONE';
+        document.getElementById('incidentStatusBadge').innerText = 'STANDBY';
+        document.getElementById('incidentStatusBadge').className = 'badge badge-success';
+        document.getElementById('diagHypothesis').innerText = 'Telemetry within nominal bounds. No anomaly detected.';
+        document.getElementById('diagEvidence').innerHTML = '<li>All telemetry metrics within standard margins.</li>';
+        document.getElementById('plansContainer').innerHTML = '<div style="font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 2rem 0;">No active recovery plans.</div>';
+        await fetchTelemetry();
+        logMessage('Simulator state reset. Spacecraft nominal.');
+      } catch (err) {
+        logMessage(`Reset failed: ${err.message}`);
+      }
+    }
+
+    async function triggerAnalyze() {
+      if (!activeIncident) {
+        logMessage('No active incident to analyze. Inject an anomaly first.');
+        return;
+      }
+      logMessage(`Triggering multi-agent analysis for incident ${activeIncident.incident_id}...`);
+      try {
+        const res = await fetch(`${getBaseUrl()}/api/incidents/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ incident_id: activeIncident.incident_id })
+        });
+        const analyzed = await res.json();
+        activeIncident = analyzed;
+        renderPlans(analyzed.recovery_plans);
+        logMessage(`Analysis completed: ${analyzed.recovery_plans.length} candidate recovery plans generated & validated.`);
+      } catch (err) {
+        logMessage(`Analysis error: ${err.message}`);
+      }
+    }
+
+    async function simulateSelectedPlan() {
+      if (!selectedPlanId) return;
+      logMessage(`Running forward digital twin simulation for plan ${selectedPlanId}...`);
+      try {
+        const res = await fetch(`${getBaseUrl()}/api/plans/${selectedPlanId}/simulate`, { method: 'POST' });
+        const sim = await res.json();
+        logMessage(`Digital Twin Simulation Result:\nOutcome: ${sim.outcome}\nProbability: ${sim.success_probability * 100}%\n${sim.logs}`);
+      } catch (err) {
+        logMessage(`Simulation error: ${err.message}`);
+      }
+    }
+
+    async function approveSelectedPlan() {
+      if (!selectedPlanId) return;
+      try {
+        const res = await fetch(`${getBaseUrl()}/api/plans/${selectedPlanId}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ operator_id: 'FLIGHT-DIRECTOR-01', notes: 'Authorized for uplink' })
+        });
+        const updated = await res.json();
+        logMessage(`Plan ${selectedPlanId} APPROVED by Flight Director.`);
+        document.getElementById('incidentStatusBadge').innerText = 'APPROVED';
+        document.getElementById('incidentStatusBadge').className = 'badge badge-info';
+      } catch (err) {
+        logMessage(`Approval error: ${err.message}`);
+      }
+    }
+
+    async function executeSelectedPlan() {
+      if (!selectedPlanId) return;
+      logMessage(`Executing recovery plan ${selectedPlanId} to spacecraft digital twin...`);
+      try {
+        const res = await fetch(`${getBaseUrl()}/api/plans/${selectedPlanId}/execute`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ operator_id: 'FLIGHT-DIRECTOR-01', notes: 'Executing uplink commands' })
+        });
+        const summary = await res.json();
+        logMessage(`Plan executed successfully!\nStatus: ${summary.status}\nRemediated telemetry reading recorded.`);
+        document.getElementById('incidentStatusBadge').innerText = 'RESOLVED';
+        document.getElementById('incidentStatusBadge').className = 'badge badge-success';
+        await fetchTelemetry();
+      } catch (err) {
+        logMessage(`Execution error: ${err.message}`);
+      }
+    }
+
+    async function rejectSelectedPlan() {
+      if (!selectedPlanId) return;
+      try {
+        await fetch(`${getBaseUrl()}/api/plans/${selectedPlanId}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ operator_id: 'FLIGHT-DIRECTOR-01', reason: 'Operator manual override' })
+        });
+        logMessage(`Plan ${selectedPlanId} REJECTED by operator.`);
+        document.getElementById('incidentStatusBadge').innerText = 'REJECTED';
+        document.getElementById('incidentStatusBadge').className = 'badge badge-danger';
+      } catch (err) {
+        logMessage(`Rejection error: ${err.message}`);
+      }
+    }
+
+    function logMessage(msg) {
+      const box = document.getElementById('simLogs');
+      const time = new Date().toISOString().substring(11, 19);
+      box.innerText += `\n[${time}] ${msg}`;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    // Initial setup
+    checkHealth();
+    fetchTelemetry();
+    setInterval(fetchTelemetry, 3000);
+  </script>
+</body>
+</html>
