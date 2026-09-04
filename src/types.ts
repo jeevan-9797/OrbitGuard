@@ -47,6 +47,11 @@ export interface AnomalyPreset {
   remediatedMetric: string;
   deltaSummary: string;
   telemetryChannel: string;
+  dependentAgents?: ('alpha' | 'beta' | 'gamma' | 'delta')[];
+  failureScenarios?: {
+    singleAgentOfflineMsg?: Record<string, string>;
+    bothAgentsOfflineMsg?: string;
+  };
   journalLogs: {
     time: string;
     agent: string;

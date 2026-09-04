@@ -8,7 +8,6 @@ import {
   Loader2,
   Rocket,
   Terminal,
-  RotateCcw,
   Sparkles,
   ShieldCheck,
 } from 'lucide-react';
@@ -221,26 +220,6 @@ export const StartupRoutineModal: React.FC<StartupRoutineModalProps> = ({ isOpen
     };
   }, [isOpen]);
 
-  const handleRestart = () => {
-    sound.playClick();
-    setCurrentStepIndex(0);
-    setIsAllComplete(false);
-    setStepStatuses({
-      avionics: 'running',
-      orbitguard: 'pending',
-      consensus: 'pending',
-      calibration: 'pending',
-    });
-    setLogs([
-      {
-        id: `restart-${Date.now()}`,
-        time: '00:00.00',
-        text: '=== RESTARTING PRE-FLIGHT STARTUP SEQUENCE ===',
-        type: 'header',
-      },
-    ]);
-  };
-
   const handleLaunchOrion = () => {
     sound.playRemediated();
     onClose();
@@ -281,16 +260,6 @@ export const StartupRoutineModal: React.FC<StartupRoutineModalProps> = ({ isOpen
               </span>
             </div>
           </div>
-
-          {/* Re-run button */}
-          <button
-            onClick={handleRestart}
-            title="Re-run diagnostic sequence"
-            className="px-2.5 py-1.5 rounded-xl bg-[#05070a] hover:bg-[#1e293b] border border-[#1e293b] text-slate-400 hover:text-white font-mono text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <RotateCcw size={12} />
-            <span className="hidden sm:inline">RE-RUN</span>
-          </button>
         </div>
 
         {/* 4 Diagnostic Steps Status Cards */}

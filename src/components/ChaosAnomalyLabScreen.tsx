@@ -84,6 +84,22 @@ export const SUBSYSTEM_DOMAIN_MAP: Record<string, DomainMapping> = {
     catastrophicMechanism:
       'Hydrazine blowdown & wild tumble: Solenoid valve #3 stuck open dumps remaining fuel supply, causing unrecoverable rotational velocity.',
   },
+  thermal_attitude_coupling: {
+    agentId: 'alpha',
+    agentName: 'Agent Alpha::Thermal & Agent Beta::AOCS',
+    governedParameter: 'Cryo-Radiator Shade Vector & AOCS Sun-Pointing Attitude',
+    telemetryMetric: 'Radiator Surface Gradient (EPS_CRYO_LOOP_GRADIENT_C)',
+    catastrophicMechanism:
+      'Multi-agent thermal/attitude divergence: Cryo-loop overheat and reaction wheel desaturation collapse vehicle stability.',
+  },
+  orbit_attitude_burn: {
+    agentId: 'gamma',
+    agentName: 'Agent Gamma::Prop & Agent Beta::AOCS',
+    governedParameter: 'In-Plane RCS Delta-V Vector & Star-Tracker 3-Axis Slew',
+    telemetryMetric: 'Perigee Altitude Deviation (ORBIT_PERIGEE_ERROR_KM)',
+    catastrophicMechanism:
+      'Multi-agent orbital burn vector anomaly: Slew vector misalignment causes cross-axis thrust impulse or ballistic atmospheric plunge.',
+  },
 };
 
 interface ChaosAnomalyLabScreenProps {
@@ -143,17 +159,65 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
   const governingAgent = agents.find((a) => a.id === domainInfo.agentId);
   const deltaAgent = agents.find((a) => a.id === 'delta');
 
-  const isGoverningAgentOffline = governingAgent?.isolated ?? false;
-  const isFdirOffline = (deltaAgent?.isolated ?? false) && domainInfo.agentId !== 'delta';
+  // Multi-agent dependency resolution
+  const dependentAgentIds: string[] = activePreset.dependentAgents && activePreset.dependentAgents.length > 0
+    ? activePreset.dependentAgents
+    : [domainInfo.agentId];
+
+  const dependentAgentsList = agents.filter((a) => dependentAgentIds.includes(a.id));
+  const offlineDependentAgents = dependentAgentsList.filter((a) => a.isolated);
+  const isAnyDependentAgentOffline = offlineDependentAgents.length > 0;
+  const isAllDependentAgentsOffline = dependentAgentsList.length > 0 && offlineDependentAgents.length === dependentAgentsList.length;
+
+  const isGoverningAgentOffline = isAnyDependentAgentOffline;
+  const isFdirOffline = (deltaAgent?.isolated ?? false) && !dependentAgentIds.includes('delta');
   const isCatastrophic = isGoverningAgentOffline || isFdirOffline || autonomySetting === 'suppressed';
 
-  const failureReason = isGoverningAgentOffline
-    ? `Primary domain agent [${governingAgent?.name}] is OFFLINE / ISOLATED. Subsystem actuators uncommanded.`
-    : isFdirOffline
-    ? `Supervisory agent [Agent Delta::FDIR] is OFFLINE. Raft-BFT consensus quorum lost (0/4 nodes signed).`
-    : autonomySetting === 'suppressed'
-    ? 'Swarm autonomy is SUPPRESSED (open-loop mode).'
-    : null;
+  // Dynamic failure reason resolving single, multiple, or FDIR offline states
+  const getDynamicFailureReason = (): string | null => {
+    if (activePreset.failureScenarios) {
+      if (activePreset.id === 'thermal_attitude_coupling') {
+        const isAlphaOff = agents.find((a) => a.id === 'alpha')?.isolated;
+        const isBetaOff = agents.find((a) => a.id === 'beta')?.isolated;
+        if (isAlphaOff && isBetaOff && activePreset.failureScenarios.bothOffline) {
+          return activePreset.failureScenarios.bothOffline;
+        }
+        if (isAlphaOff && activePreset.failureScenarios.alphaOffline) {
+          return activePreset.failureScenarios.alphaOffline;
+        }
+        if (isBetaOff && activePreset.failureScenarios.betaOffline) {
+          return activePreset.failureScenarios.betaOffline;
+        }
+      }
+      if (activePreset.id === 'orbit_attitude_burn') {
+        const isBetaOff = agents.find((a) => a.id === 'beta')?.isolated;
+        const isGammaOff = agents.find((a) => a.id === 'gamma')?.isolated;
+        if (isBetaOff && isGammaOff && activePreset.failureScenarios.bothOffline) {
+          return activePreset.failureScenarios.bothOffline;
+        }
+        if (isBetaOff && activePreset.failureScenarios.betaOffline) {
+          return activePreset.failureScenarios.betaOffline;
+        }
+        if (isGammaOff && activePreset.failureScenarios.gammaOffline) {
+          return activePreset.failureScenarios.gammaOffline;
+        }
+      }
+    }
+
+    if (isGoverningAgentOffline) {
+      const names = offlineDependentAgents.map((a) => a.name).join(' & ');
+      return `Governing domain agent(s) [${names}] OFFLINE / ISOLATED. Inter-agent closed-loop coordination severed.`;
+    }
+    if (isFdirOffline) {
+      return `Supervisory agent [Agent Delta::FDIR] is OFFLINE. Raft-BFT consensus quorum lost (0/4 nodes signed).`;
+    }
+    if (autonomySetting === 'suppressed') {
+      return 'Swarm autonomy is SUPPRESSED (open-loop mode).';
+    }
+    return null;
+  };
+
+  const failureReason = getDynamicFailureReason();
 
   const effectiveMitigationTime =
     autonomySetting === 'hitl'
@@ -216,6 +280,12 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
       setTimeout(() => onUpdateAlertCount(crit, warn), 0);
     }
 
+    const initialOfflineMsg = isGoverningAgentOffline
+      ? `⚠️ CRITICAL: Domain agent(s) [${offlineDependentAgents.map((a) => a.name).join(' & ')}] OFFLINE! Anomaly cannot be corrected and will trigger catastrophic failure.`
+      : isFdirOffline
+      ? '⚠️ CRITICAL: Consensus node Agent Delta::FDIR is OFFLINE! Byzantine consensus cannot form.'
+      : 'All governing mesh nodes ONLINE.';
+
     const initialEntry: CoTLogEntry = {
       id: `log-${Date.now()}-0`,
       timestamp: '+00:00.00',
@@ -224,13 +294,7 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
       tagColor: 'bg-amber-500/20 text-amber-300',
       message: `[INJECTION EVENT] ${activePreset.title} injected at severity Level ${severityLevel} (${Math.round(
         (severityLevel / 4) * 100
-      )}%). Target: ${activePreset.telemetryChannel}. ${
-        isGoverningAgentOffline
-          ? `⚠️ CRITICAL: Domain agent ${governingAgent?.name} is OFFLINE! Anomaly cannot be corrected and will lead to catastrophic vehicle failure.`
-          : isFdirOffline
-          ? '⚠️ CRITICAL: Consensus node Agent Delta::FDIR is OFFLINE! Byzantine consensus cannot form.'
-          : 'All governing mesh nodes ONLINE.'
-      }`,
+      )}%). Target: ${activePreset.telemetryChannel}. ${initialOfflineMsg}`,
     };
     setJournalLogs([initialEntry]);
 
@@ -344,19 +408,13 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
             id: `log-${Date.now()}-fatal1`,
             timestamp: fatalTimeStr,
             agent: isGoverningAgentOffline
-              ? (governingAgent?.name || 'SWARM_GOVERNOR')
+              ? (offlineDependentAgents.map((a) => a.name).join(' & ') || 'SWARM_GOVERNOR')
               : isFdirOffline
               ? 'Agent Delta::FDIR'
               : 'FLIGHT_SAFETY',
             tag: 'CATASTROPHIC_FAIL',
             tagColor: 'bg-rose-600 text-white font-black animate-pulse',
-            message: `🚨 REMEDIATION FAILED: ${
-              isGoverningAgentOffline
-                ? `Governing node [${governingAgent?.name}] is OFFLINE / ISOLATED! Subsystem actuators uncommanded.`
-                : isFdirOffline
-                ? 'Supervisor [Agent Delta::FDIR] is OFFLINE. Raft-BFT consensus quorum lost (0/4 nodes signed).'
-                : 'Autonomous mitigation disabled.'
-            } Parameter diverging into unrecoverable catastrophic failure!`,
+            message: `🚨 REMEDIATION FAILED: ${failureReason || 'Autonomous mitigation disabled.'} Parameter diverging into unrecoverable catastrophic failure!`,
           };
 
           const fatalEntry2: CoTLogEntry = {
@@ -447,6 +505,8 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
     isFdirOffline,
     governingAgent,
     domainInfo,
+    failureReason,
+    offlineDependentAgents,
   ]);
 
   useEffect(() => {
@@ -525,6 +585,50 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
     if (isFailureRun) {
       if (t <= 0) return baselineY;
       const progress = Math.min(1.0, t / 10.0);
+
+      // Multi-agent custom failure graph profiles
+      if (activePreset.id === 'thermal_attitude_coupling') {
+        const isAlphaOff = agents.find((a) => a.id === 'alpha')?.isolated;
+        const isBetaOff = agents.find((a) => a.id === 'beta')?.isolated;
+
+        if (isAlphaOff && isBetaOff) {
+          // Both offline: Rapid exponential runaway + high frequency oscillation
+          const runaway = Math.min(142, maxDeflection * 1.8 * Math.pow(progress, 1.45));
+          const violentOsc = t > 2 ? Math.sin(t * 14.5) * 8.5 : 0;
+          return Math.max(10, baselineY - runaway + violentOsc + jitter * 1.4);
+        } else if (isAlphaOff) {
+          // Alpha offline: Thermal runaway parabolic climb
+          const thermalClimb = Math.min(135, maxDeflection * 1.5 * Math.pow(progress, 1.3));
+          return Math.max(12, baselineY - thermalClimb + jitter * 0.8);
+        } else if (isBetaOff) {
+          // Beta offline: Reaction wheel saturation sawtooth oscillatory instability
+          const attitudeOsc = Math.sin(t * 5.2) * (20 + progress * 40);
+          const drift = Math.min(125, maxDeflection * 1.25 * progress);
+          return Math.max(15, Math.min(270, baselineY - drift + attitudeOsc + jitter));
+        }
+      }
+
+      if (activePreset.id === 'orbit_attitude_burn') {
+        const isBetaOff = agents.find((a) => a.id === 'beta')?.isolated;
+        const isGammaOff = agents.find((a) => a.id === 'gamma')?.isolated;
+
+        if (isBetaOff && isGammaOff) {
+          // Both offline: Uncontrolled tumble + full thrust burn = wild spirals & steep re-entry plunge
+          const dive = Math.min(140, maxDeflection * 1.75 * Math.pow(progress, 1.5));
+          const tumbleVortex = Math.sin(t * 11.2) * (15 * progress) + Math.cos(t * 7.4) * (10 * progress);
+          return Math.max(10, baselineY - dive + tumbleVortex + jitter * 1.5);
+        } else if (isBetaOff) {
+          // Beta offline: Misaligned cross-axis impulse with oscillating orbital eccentricity
+          const lateralWobble = Math.sin(t * 4.8) * 32 * Math.min(1.0, t / 4.0);
+          const offAxisImpulse = Math.min(120, maxDeflection * 1.3 * progress);
+          return Math.max(15, baselineY - offAxisImpulse + lateralWobble + jitter);
+        } else if (isGammaOff) {
+          // Gamma offline: Zero thrust compensation under continuous atmospheric ballistic decay
+          const ballisticPlunge = Math.min(138, maxDeflection * 1.6 * Math.pow(progress, 1.35));
+          return Math.max(12, baselineY - ballisticPlunge + jitter * 0.7);
+        }
+      }
+
       const unmitigated = Math.min(140, maxDeflection * 1.55 * Math.pow(progress, 1.25));
       return Math.max(12, baselineY - unmitigated + jitter);
     }
@@ -605,6 +709,40 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
       return isCatastrophic && t >= effectiveMitigationTime
         ? `${2420 - lossW} W (BUS BROWNOUT HAZARD)`
         : `${2420 - lossW} W`;
+    }
+    if (activePreset.id === 'thermal_attitude_coupling') {
+      const isAlphaOff = agents.find((a) => a.id === 'alpha')?.isolated;
+      const isBetaOff = agents.find((a) => a.id === 'beta')?.isolated;
+      const grad = (1.4 + 48.2 * norm * (severityLevel / 4)).toFixed(1);
+
+      if (isCatastrophic && t >= effectiveMitigationTime) {
+        if (isAlphaOff && isBetaOff) {
+          return `+${grad} °C (DUAL-AGENT COLLAPSE: BOIL-OFF + TUMBLE)`;
+        } else if (isAlphaOff) {
+          return `+${grad} °C (ALPHA OFFLINE: CRYO LOOP BOIL-OFF)`;
+        } else if (isBetaOff) {
+          return `+${grad} °C (BETA OFFLINE: ATTITUDE DRIFT DESAT)`;
+        }
+        return `+${grad} °C (CRYO GRADIENT RUNAWAY)`;
+      }
+      return `+${grad} °C`;
+    }
+    if (activePreset.id === 'orbit_attitude_burn') {
+      const isBetaOff = agents.find((a) => a.id === 'beta')?.isolated;
+      const isGammaOff = agents.find((a) => a.id === 'gamma')?.isolated;
+      const errKm = (0.2 + 82.5 * norm * (severityLevel / 4)).toFixed(1);
+
+      if (isCatastrophic && t >= effectiveMitigationTime) {
+        if (isBetaOff && isGammaOff) {
+          return `-${errKm} km (DUAL-AGENT FAILURE: SPIRAL PLUNGE)`;
+        } else if (isBetaOff) {
+          return `±${errKm} km (BETA OFFLINE: CROSS-AXIS IMPULSE)`;
+        } else if (isGammaOff) {
+          return `-${errKm} km (GAMMA OFFLINE: BALLISTIC RE-ENTRY)`;
+        }
+        return `-${errKm} km (PERIGEE ANOMALY RUNAWAY)`;
+      }
+      return `±${errKm} km`;
     }
     return activePreset.faultMetric;
   };
@@ -721,7 +859,7 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {ANOMALY_PRESETS.map((preset) => {
             const isSelected = activePreset.id === preset.id;
             return (
@@ -806,7 +944,7 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
         {/* 4 Agent Nodes Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-mono">
           {agents.map((agent) => {
-            const isDomainGovernor = domainInfo.agentId === agent.id;
+            const isDomainGovernor = dependentAgentIds.includes(agent.id);
             const isOffline = agent.isolated;
 
             return (
@@ -855,7 +993,7 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
                         isOffline ? 'text-rose-400 animate-pulse' : 'text-amber-400'
                       }`}
                     >
-                      <span>🎯 GOVERNS ACTIVE FAULT</span>
+                      <span>🎯 {dependentAgentIds.length > 1 ? 'CO-GOVERNS FAULT' : 'GOVERNS ACTIVE FAULT'}</span>
                       {isOffline && <span>(DISABLED)</span>}
                     </div>
                   )}
@@ -1855,7 +1993,7 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
                 x: getXForTime(effectiveMitigationTime),
                 y: getYForTime(effectiveMitigationTime, false),
                 label: isCatastrophic
-                  ? `T+${effectiveMitigationTime.toFixed(1)}s MITIGATION FAILED (${isGoverningAgentOffline ? governingAgent?.name : 'QUORUM'} OFFLINE)`
+                  ? `T+${effectiveMitigationTime.toFixed(1)}s MITIGATION FAILED (${isGoverningAgentOffline ? offlineDependentAgents.map(a => a.name).join(' & ') : 'QUORUM'} OFFLINE)`
                   : autonomySetting === 'suppressed'
                   ? 'AUTONOMY OFF (NO MITIGATION)'
                   : autonomySetting === 'hitl'
@@ -2137,7 +2275,7 @@ export const ChaosAnomalyLabScreen: React.FC<ChaosAnomalyLabScreenProps> = ({
             <div className="text-xs font-semibold my-1 text-slate-100">
               {isCatastrophic
                 ? isGoverningAgentOffline
-                  ? `Governor [${governingAgent?.name}] Offline`
+                  ? `Governor [${offlineDependentAgents.map(a => a.name).join(' & ')}] Offline`
                   : 'FDIR Supervisor Offline'
                 : autonomySetting === 'suppressed'
                 ? 'Autonomous Mitigation Disabled'
