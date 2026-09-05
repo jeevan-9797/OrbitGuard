@@ -1,4 +1,4 @@
-# ASTRA-7 Autonomous Satellite Digital Twin & Swarm Operations Console
+# ORION (build 7) Autonomous Satellite Digital Twin & Swarm Operations Console
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg?logo=typescript)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg?logo=react)](https://react.dev/)
